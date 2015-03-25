@@ -39,7 +39,7 @@ bool blinkState = false;
 // ================================================================
 // ===                        Switches                          ===
 // ================================================================
-//#define OUTPUT_READABLE_YAWPITCHROLL
+#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 
 // I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
