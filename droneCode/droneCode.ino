@@ -39,7 +39,7 @@ bool blinkState = false;
 // ================================================================
 // ===                        Switches                          ===
 // ================================================================
-#define OUTPUT_READABLE_YAWPITCHROLL
+//#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 
 // I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
@@ -85,14 +85,8 @@ float stdYPR[3] = {0,0,0};       //
 const int baseSpeed = 128; //base speed we are rotating the motor
 int power=0; //goes from 0 to 100
 
-unsigned long clock;
-unsigned long previousAMicros = 0;
-unsigned long previousBMicros = 0;
-unsigned long previousCMicros = 0;
-unsigned long previousDMicros = 0;
-
-const int maxAcclValue = 30; //experimentally detirmened
-const int minAcclValue = -35;  //experimentally detirmined
+const int maxAcclValue = 80; //experimentally detirmened
+const int minAcclValue = -85;  //experimentally detirmined
 
 
 // ================================================================
@@ -120,25 +114,22 @@ void setup()
   //9600 is magical. Havent tested to see if any other baud rate is not magical
   Serial.begin(9600);
   setUpMPU();
-  Serial.print("ready");
 } 
  
  
 void loop() 
 {
-  //clock = micros();
     getYawPitchRoll(&ypr[0]); //fill acceleration array
-    // Serial.println(micros()-clock);
     if(Serial.available()){
       power=Serial.read();
     }
 
     noInterrupts();
-    spinRotorA( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorA( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
     //Serial.println(micros()-clock);
-    spinRotorB( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorC( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorD( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorB( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorC( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorD( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
     interrupts();
 }
 
@@ -155,7 +146,6 @@ int spinRotorA(int speedChange, int minNum, int maxNum) {
   int spedeSent = baseSpeed + actualSpeedChange;
   analogWrite(motorAPin, spedeSent);
   //Serial.print("Motor A: ");   Serial.print(spedeSent);
-
   return spedeSent;
 }
 
@@ -187,27 +177,6 @@ int spinRotorD(int speedChange, int minNum, int maxNum) {
 }
 
 
-
-
-unsigned long run_motor(int motorPin, int motorSpeed, unsigned long previousMicros) {
- //motorSpeed is a given value from 0 to 255
- //time on = 1035 + 3.42745*motorSpeed microseconds
- //time off = 21 millisenonds
-
-//set variable that holds current time to the time since the program started
-unsigned long currentMicros = micros();
-if ((currentMicros - previousMicros) <= 1035 + round(3.42745*motorSpeed)){
- digitalWrite(motorPin, HIGH);
- }
-else if (currentMicros - previousMicros <= 21000) {
-  digitalWrite(motorPin, LOW);
- }
-else {
-  previousMicros = currentMicros;
- }
- return previousMicros;
- 
-}
 
 void errorMPUInitializationFailure() {
   boolean error[2] = {1,1};
