@@ -1,3 +1,17 @@
+#include <Servo.h>
+
+// I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
+// for both classes must be in the include path of your project
+#include "I2Cdev.h"
+
+#include "MPU6050_6Axis_MotionApps20.h"
+//#include "MPU6050.h" // not necessary if using MotionApps include file
+
+// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
+// is used in I2Cdev.h
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+    #include "Wire.h"
+#endif
 
 // ================================================================
 // ===                      Description                       ===
@@ -13,10 +27,12 @@
 //SDA is A4
 //SCA is A5
 const int mpuInteruptPin = 2;
-const int motorAPin = 10;
-const int motorBPin = 11;
-const int motorCPin = 6;
-const int motorDPin = 9;
+
+const int motor0Pin = 10; //A
+const int motor1Pin = 11; //B
+const int motor2Pin = 6; //C
+const int motor3Pin = 9; //D
+
 
 
 
@@ -39,21 +55,9 @@ bool blinkState = false;
 // ================================================================
 // ===                        Switches                          ===
 // ================================================================
-//#define OUTPUT_READABLE_YAWPITCHROLL
+#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 
-// I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
-// for both classes must be in the include path of your project
-#include "I2Cdev.h"
-
-#include "MPU6050_6Axis_MotionApps20.h"
-//#include "MPU6050.h" // not necessary if using MotionApps include file
-
-// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
-// is used in I2Cdev.h
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    #include "Wire.h"
-#endif
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -88,6 +92,7 @@ int power=0; //goes from 0 to 100
 const int maxAcclValue = 80; //experimentally detirmened
 const int minAcclValue = -85;  //experimentally detirmined
 
+Servo motor[4];
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -99,13 +104,11 @@ void dmpDataReady() {
 }
 
 
-void setup() 
-{ 
-  pinMode(9, OUTPUT);
-  pinMode(motorAPin, OUTPUT);
-  pinMode(motorBPin, OUTPUT);
-  pinMode(motorCPin, OUTPUT);
-  pinMode(motorDPin, OUTPUT);
+void setup() { 
+  motor[0].attach(motor0Pin);    // attached to pin 
+  motor[1].attach(motor1Pin);    // attached to pin 
+  motor[2].attach(motor2Pin);    // attached to pin 
+  motor[3].attach(motor3Pin);    // attached to pin 
 
   // configure LED for output
   pinMode(LED_PIN, OUTPUT);
@@ -114,7 +117,15 @@ void setup()
   //9600 is magical. Havent tested to see if any other baud rate is not magical
   Serial.begin(9600);
   setUpMPU();
-} 
+  
+  
+    // wait for ready
+    Serial.println(F("Press any key to arm: "));
+    while (Serial.available() && Serial.read()); // empty buffer
+    while (!Serial.available());                 // wait for data
+    while (Serial.available() && Serial.read()); // empty buffer again
+  arm(&motor[0]);
+}
  
  
 void loop() 
@@ -125,11 +136,10 @@ void loop()
     }
 
     noInterrupts();
-    spinRotorA( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    //Serial.println(micros()-clock);
-    spinRotorB( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorC( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorD( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorA( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorB( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorC( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotorD( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
     interrupts();
 }
 
@@ -139,13 +149,14 @@ int getSpeedChangeMagnitude(float pitch, float roll) {
 }
 
 
+ 
+
 
 // speed change is number, give max and min to make it releative, controls motorA
 int spinRotorA(int speedChange, int minNum, int maxNum) {
   int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
   int spedeSent = baseSpeed + actualSpeedChange;
-  analogWrite(motorAPin, spedeSent);
-  //Serial.print("Motor A: ");   Serial.print(spedeSent);
+  motor[0].writeMicroseconds(spedeSent);
   return spedeSent;
 }
 
@@ -153,7 +164,7 @@ int spinRotorA(int speedChange, int minNum, int maxNum) {
 int spinRotorB(int speedChange, int minNum, int maxNum) {
   int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
   int spedeSent = baseSpeed + actualSpeedChange;
-  analogWrite(motorBPin, spedeSent);
+  motor[1].writeMicroseconds(spedeSent);
   //Serial.print("   Motor B: "); Serial.print(spedeSent);
   return spedeSent;
 }
@@ -162,7 +173,7 @@ int spinRotorB(int speedChange, int minNum, int maxNum) {
 int spinRotorC(int speedChange, int minNum, int maxNum) {
   int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
   int spedeSent = baseSpeed + actualSpeedChange;
-  analogWrite(motorCPin, spedeSent);
+  motor[2].writeMicroseconds(spedeSent);
   //Serial.print("  Motor C: "); Serial.print(spedeSent);
   return spedeSent;
 }
@@ -171,7 +182,7 @@ int spinRotorC(int speedChange, int minNum, int maxNum) {
 int spinRotorD(int speedChange, int minNum, int maxNum) {
   int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
   int spedeSent = baseSpeed + actualSpeedChange;
-  analogWrite(motorDPin, spedeSent);
+  motor[3].writeMicroseconds(spedeSent);
   //Serial.print("    Motor D: "); Serial.println(spedeSent);
   return spedeSent;
 }
@@ -201,6 +212,7 @@ void blinkErrorCode(boolean* errorCode, int len) {
     delay(1000);
   }
 }
+
 
 //0 is yaw, 1 is pitch, 2 is roll
 //ypr must be a array size 3
@@ -256,6 +268,31 @@ void getYawPitchRoll(float *ypr) {
         #endif
     }
 }
+
+
+void arm(Servo *motor) {
+    //begin arming sequence
+   for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(1000); //low throtle
+   } 
+   
+   delay(5000); //5 seconds is overkill, but want to be sure. This must be written after 4 beeps
+
+  
+  Serial.begin(9600);    // start serial at 9600 baud
+  
+   for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(2000); //high throtle
+   } 
+   
+   delay(50); //let it get up to speed/register but dont let if lift
+   
+   for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(1000); //low throtle
+   } 
+   
+   //end arming sequence
+ }
 
 void setUpMPU() {
      // join I2C bus (I2Cdev library doesn't do this automatically)
