@@ -86,9 +86,12 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 float stdYPR[3] = {0,0,0};       //
 
 
-const int baseSpeed = 128; //base speed we are rotating the motor
+const int minThorttle = 1000; //base speed we are rotating the motor
+const int maxThorttle = 2000; //base speed we are rotating the motor
+
 int power=0; //goes from 0 to 100
 
+const int hoverSpeed = 1200; //random untested value - should be where drone hovers
 const int maxAcclValue = 80; //experimentally detirmened
 const int minAcclValue = -85;  //experimentally detirmined
 
@@ -136,10 +139,10 @@ void loop()
     }
 
     noInterrupts();
-    spinRotorA( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorB( getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorC( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
-    spinRotorD( getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) , minAcclValue, maxAcclValue);
+    spinRotor(motor[0], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) );  //spin rotor D
     interrupts();
 }
 
@@ -150,40 +153,11 @@ int getSpeedChangeMagnitude(float pitch, float roll) {
 
 
  
-
-
 // speed change is number, give max and min to make it releative, controls motorA
-int spinRotorA(int speedChange, int minNum, int maxNum) {
-  int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
-  int spedeSent = baseSpeed + actualSpeedChange;
-  motor[0].writeMicroseconds(spedeSent);
-  return spedeSent;
-}
-
-// speed change is number, give max and min to make it releative, controls motor B
-int spinRotorB(int speedChange, int minNum, int maxNum) {
-  int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
-  int spedeSent = baseSpeed + actualSpeedChange;
-  motor[1].writeMicroseconds(spedeSent);
-  //Serial.print("   Motor B: "); Serial.print(spedeSent);
-  return spedeSent;
-}
-
-// speed change is number, give max and min to make it releative, controls motor C
-int spinRotorC(int speedChange, int minNum, int maxNum) {
-  int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
-  int spedeSent = baseSpeed + actualSpeedChange;
-  motor[2].writeMicroseconds(spedeSent);
-  //Serial.print("  Motor C: "); Serial.print(spedeSent);
-  return spedeSent;
-}
-
-// speed change is number, give max and min to make it releative, controls motor D
-int spinRotorD(int speedChange, int minNum, int maxNum) {
-  int actualSpeedChange =  map(speedChange, minNum, maxNum, -baseSpeed, 255-baseSpeed);
-  int spedeSent = baseSpeed + actualSpeedChange;
-  motor[3].writeMicroseconds(spedeSent);
-  //Serial.print("    Motor D: "); Serial.println(spedeSent);
+int spinRotor(Servo motor, int speedChange) {
+  int spedeChange =  map(speedChange, minAcclValue, maxAcclValue, minThorttle, maxThorttle);
+  int spedeSent = hoverSpeed + spedeChange;
+  motor.writeMicroseconds(spedeSent);
   return spedeSent;
 }
 
