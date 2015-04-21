@@ -27,7 +27,7 @@ void setup() {
 
   
   
-
+/*
       // wait for ready
     Serial.println(F("Press any key to arm: "));
     while (Serial.available() && Serial.read()); // empty buffer
@@ -41,7 +41,7 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
-
+  */
 }
 
 void loop() {
@@ -50,7 +50,7 @@ void loop() {
  
  // motorA.writeMicroseconds(value);
    for(int i=0; i<4;i++) {
-    motor[i].writeMicroseconds(value);
+    motor[2].writeMicroseconds(value);
    } 
    
   if(Serial.available()) {
@@ -59,13 +59,8 @@ void loop() {
     pause =! pause;
   }
   
-     Serial.print(value);
-  Serial.print(" : ");
-  Serial.println(pause);
+     Serial.println(value);
   
-  if( (int) millis%250<=15 && !pause) {
-   value = value+10; 
-  }
   
   
 
