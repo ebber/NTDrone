@@ -48,9 +48,8 @@ void loop() {
 
 //First connect your ESC WITHOUT Arming. Then Open Serial and follo Instructions
  
- // motorA.writeMicroseconds(value);
    for(int i=0; i<4;i++) {
-    motor[2].writeMicroseconds(value);
+    motor[i].writeMicroseconds(value);
    } 
    
   if(Serial.available()) {
