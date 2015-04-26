@@ -27,7 +27,7 @@ void setup() {
 
   
   
-/*
+
       // wait for ready
     Serial.println(F("Press any key to arm: "));
     while (Serial.available() && Serial.read()); // empty buffer
@@ -41,7 +41,7 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
-  */
+ 
 }
 
 void loop() {
