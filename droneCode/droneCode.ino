@@ -127,7 +127,7 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
-  arm(&motor[0]);
+  //arm(&motor[0]);
 }
  
  
@@ -139,10 +139,10 @@ void loop()
     }
 
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) );  //spin rotor D
+    spinRotor(motor[0], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) );  //spin rotor D
     interrupts();
 }
 

@@ -6,7 +6,7 @@ Open source - do what you want with this code!
 #include <Servo.h>
 
 
-int value = 1000; // set values you need to zero
+int value = 900; // set values you need to zero
 bool pause=false;
 
 const int motor0Pin = 10; //A
@@ -33,8 +33,11 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
-    arm(&motor[0]);
-   
+    //For redbricks
+    //arm(&motor[0]);
+    for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(900); //low throtle
+   } 
     
         // wait for ready
     Serial.println(F("Press any key to begin: "));
@@ -54,7 +57,7 @@ void loop() {
    
   if(Serial.available()) {
     int in=Serial.parseInt();
-    value = (in>=1000 && in <= 2000) ? in:value;    // Parse an Integer from Serial
+    value = (in>=900 && in <= 2000) ? in:value;    // Parse an Integer from Serial
     pause =! pause;
   }
   
@@ -64,7 +67,7 @@ void loop() {
   
 
 }
-
+//for redbrick ESCs
 void arm(Servo *motor) {
     //begin arming sequence
    for(int i=0; i<4;i++) {
