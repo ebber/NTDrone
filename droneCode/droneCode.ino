@@ -55,7 +55,7 @@ bool blinkState = false;
 // ================================================================
 // ===                        Switches                          ===
 // ================================================================
-#define OUTPUT_READABLE_YAWPITCHROLL
+//#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 
 
@@ -86,12 +86,12 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 float stdYPR[3] = {0,0,0};       //
 
 
-const int minThorttle = 1000; //base speed we are rotating the motor
-const int maxThorttle = 2000; //base speed we are rotating the motor
+const int minThorttle = 900; //base speed we are rotating the motor
+const int maxThorttle = 1200; //base speed we are rotating the motor
 
 int power=0; //goes from 0 to 100
 
-const int hoverSpeed = 1200; //random untested value - should be where drone hovers
+//const int hoverSpeed = 1200; //random untested value - should be where drone hovers
 const int maxAcclValue = 80; //experimentally detirmened
 const int minAcclValue = -85;  //experimentally detirmined
 
@@ -121,13 +121,20 @@ void setup() {
   Serial.begin(9600);
   setUpMPU();
   
-  
+     for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(900); //low throtle
+   } 
+   
     // wait for ready
     Serial.println(F("Press any key to arm: "));
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
   //arm(&motor[0]);
+  
+    //begin arming sequence
+
+   
 }
  
  
@@ -156,7 +163,7 @@ int getSpeedChangeMagnitude(float pitch, float roll) {
 // speed change is number, give max and min to make it releative, controls motorA
 int spinRotor(Servo motor, int speedChange) {
   int spedeChange =  map(speedChange, minAcclValue, maxAcclValue, minThorttle, maxThorttle);
-  int spedeSent = hoverSpeed + spedeChange;
+  int spedeSent = /*hoverSpeed +*/ spedeChange;
   motor.writeMicroseconds(spedeSent);
   return spedeSent;
 }
