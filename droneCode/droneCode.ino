@@ -142,7 +142,7 @@ void loop()
 {
     getYawPitchRoll(&ypr[0]); //fill acceleration array
     if(Serial.available()){
-      power=Serial.read();
+      power=Serial.parseInt();
     }
 
     noInterrupts();
