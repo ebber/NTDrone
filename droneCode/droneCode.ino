@@ -92,8 +92,8 @@ const int maxThorttle = 1200; //base speed we are rotating the motor
 int power=0; //goes from 0 to 100
 
 //const int hoverSpeed = 1200; //random untested value - should be where drone hovers
-const int maxAcclValue = 80; //experimentally detirmened
-const int minAcclValue = -85;  //experimentally detirmined
+const int maxAcclValue = 100; //experimentally detirmened
+const int minAcclValue = 0;  //experimentally detirmined
 
 Servo motor[4];
 
