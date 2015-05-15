@@ -181,17 +181,17 @@ void loop()
     //Serial.print("  ");
 
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude(-adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude(adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude(adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2])); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude(-adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2]));  //spin rotor D
+    spinRotor(motor[0], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2])); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2]));  //spin rotor D
     Serial.println();
     interrupts();
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
-int getSpeedChangeMagnitude(float pitch, float roll) {
-  return (int) ((pitch + roll));
+int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
+  return (int) ((pitch + roll+ yaw));
 }
 
 
