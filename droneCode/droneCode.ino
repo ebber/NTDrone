@@ -74,6 +74,7 @@ const int maxPitch = 60; //TODO: find real Values
 const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
+//TODO1:Find true value
 const float correctionMod = 1; //stabilization modifier (ie correction factor multiplied by this value)
 
 
