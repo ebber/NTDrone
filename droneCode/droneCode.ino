@@ -87,6 +87,7 @@ const float correctionMod = 1; //stabilization modifier (ie correction factor mu
 // ================================================================
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
+//#define MOTOR_SPEEDS
 
 
 // class default I2C address is 0x68
@@ -156,7 +157,7 @@ void setup() {
   filStdYPR(&stdYPR[0]); 
    
     // wait for ready
-    Serial.println(F("Press any key to arm: "));
+    Serial.println(F("Press any key to begin: "));
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
@@ -179,15 +180,13 @@ void loop() {
       }
      
     }
-    //Serial.print(throttle);
-    //Serial.print("  ");
+
 
     noInterrupts();
     spinRotor(motor[0], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor A
     spinRotor(motor[1], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor B
     spinRotor(motor[2], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2])); //spin rotor C
     spinRotor(motor[3], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2]));  //spin rotor D
-    Serial.println();
     interrupts();
 }
 
@@ -201,8 +200,12 @@ int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
 // speed change is number, give max and min to make it releative, controls motorA
 int spinRotor(Servo motor, int speedChange) {
   int spedeSent = speedChange+throttle;
-  Serial.print(spedeSent);
-  Serial.print("    ");
+  
+  #ifdef MOTOR_SPEEDS
+    Serial.print(spedeSent);
+    Serial.print("    ");
+  #endif
+  
   motor.writeMicroseconds(spedeSent);
   return spedeSent;
 }
