@@ -74,6 +74,8 @@ const int maxPitch = 60; //TODO: find real Values
 const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
+const float correctionMod = 1; //stabilization modifier (ie correction factor multiplied by this value)
+
 
 
 
@@ -191,7 +193,7 @@ void loop()
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
 int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
-  return (int) ((pitch + roll+ yaw));
+  return (int) ( (pitch + roll+ yaw) * correctionMod);
 }
 
 
