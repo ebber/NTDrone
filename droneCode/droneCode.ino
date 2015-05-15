@@ -151,9 +151,8 @@ void setup() {
    } 
    
    #ifdef VERBOSE_SERIAL
-      Serial.println("Calibrating yaw pitch roll");
+      Serial.println(F("Calibrating yaw pitch roll"));
    #endif
-   delay(300);
   filStdYPR(&stdYPR[0]); 
    
     // wait for ready
@@ -209,8 +208,22 @@ int spinRotor(Servo motor, int speedChange) {
 }
 
 void filStdYPR(float* stdYPR) {
- //add in debouncing later
-  getYawPitchRoll(&stdYPR[0]); 
+
+ //average of 20 values, weighted towards the newest values
+ int i = 0;
+ float tempYPR[3];
+ while(i<20) {
+   //if mpu has signaled its ready or theres a packet waiting
+   if (mpuInterrupt || fifoCount > packetSize) {
+    getYawPitchRoll(&tempYPR[0]);
+    stdYPR[0] = (2*stdYPR[0]+tempYPR[0])/3;  
+    stdYPR[1] = (2*stdYPR[1]+tempYPR[1])/3;  
+    stdYPR[2] = (2*stdYPR[2]+tempYPR[2])/3;  
+
+    i++;
+   }
+ }
+ return;
 }
 
 
