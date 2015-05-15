@@ -51,6 +51,33 @@ bool blinkState = false;
 */
 
 
+// ================================================================
+// ===                      Constants                           ===
+// ================================================================
+const int minThorttle = 900; //base speed we are rotating the motor
+const int maxThorttle = 1000; //base speed we are rotating the motor
+int baseSpeed=980;
+
+
+const int armSpeed = 900;
+const int hoverSpeed = 1200; //random untested value - should be where drone hovers
+const int launchSpeed = 1400; //iffy tested exact testing needed
+const int maxAcclValue = 100; //experimentally detirmened
+const int minAcclValue = 0;  //experimentally detirmined
+
+const int minYaw = -180;  //TODO: Find real values
+const int maxYaw = 180;  //TODO: Find real Values
+
+const int minPitch = -60; //TODO: find real Values
+const int maxPitch = 60; //TODO: find real Values
+
+const int minRoll = -70; //TODO: find real Values
+const int maxRoll = 70; //TODO: find real Values
+
+
+
+
+
 
 // ================================================================
 // ===                        Switches                          ===
@@ -83,19 +110,14 @@ VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measure
 VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float stdYPR[3] = {0,0,0};       //
+float adjYPR[3];        // [yaw, pitch, roll] adjusted based on calibration adn mapped to -33,33
+float stdYPR[3];       //base values when its flat
 
+int throttle=90; //goes from 0 to 100
 
-const int minThorttle = 900; //base speed we are rotating the motor
-const int maxThorttle = 1200; //base speed we are rotating the motor
-
-int power=0; //goes from 0 to 100
-
-//const int hoverSpeed = 1200; //random untested value - should be where drone hovers
-const int maxAcclValue = 100; //experimentally detirmened
-const int minAcclValue = 0;  //experimentally detirmined
 
 Servo motor[4];
+
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -122,8 +144,14 @@ void setup() {
   setUpMPU();
   
      for(int i=0; i<4;i++) {
-      motor[i].writeMicroseconds(900); //low throtle
+      motor[i].writeMicroseconds(armSpeed); //low throtle
    } 
+   
+   #ifdef VERBOSE_SERIAL
+      Serial.println("Calibrating yaw pitch roll");
+   #endif
+   delay(300);
+  filStdYPR(&stdYPR[0]); 
    
     // wait for ready
     Serial.println(F("Press any key to arm: "));
@@ -141,34 +169,58 @@ void setup() {
 void loop() 
 {
     getYawPitchRoll(&ypr[0]); //fill acceleration array
+    adjustYPR(&ypr[0], &adjYPR[0]);
+    
     if(Serial.available()){
-      power=Serial.parseInt();
+      throttle=Serial.parseInt()*10; //GOES FROM 90 TO 200
+      if(throttle < 900 && throttle >2000) {
+        throttle=0;
+      }
+     
     }
+    //Serial.print(throttle);
+    //Serial.print("  ");
 
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], ypr[2] - stdYPR[2]) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude(ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) ); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude(-ypr[1] - stdYPR[1], -ypr[2] - stdYPR[2]) );  //spin rotor D
+    spinRotor(motor[0], getSpeedChangeMagnitude(-adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude(adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude(adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2])); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude(-adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2]));  //spin rotor D
+    Serial.println();
     interrupts();
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
 int getSpeedChangeMagnitude(float pitch, float roll) {
-  return (int) (power/100)* (pitch + roll)/2;
+  return (int) ((pitch + roll));
 }
 
 
  
 // speed change is number, give max and min to make it releative, controls motorA
 int spinRotor(Servo motor, int speedChange) {
-  int spedeChange =  map(speedChange, minAcclValue, maxAcclValue, minThorttle, maxThorttle);
-  int spedeSent = /*hoverSpeed +*/ spedeChange;
+  int spedeSent = speedChange+throttle;
+  Serial.print(spedeSent);
+  Serial.print("    ");
   motor.writeMicroseconds(spedeSent);
   return spedeSent;
 }
 
+void filStdYPR(float* stdYPR) {
+ //add in debouncing later
+  getYawPitchRoll(&stdYPR[0]); 
+}
 
+
+void adjustYPR(float* ypr, float* newYPR) {
+ //yaw
+  newYPR[0] = map(ypr[0]-stdYPR[0], minYaw, maxYaw, -33,33); 
+  //pitch
+  newYPR[1] = map(ypr[1]-stdYPR[1], minPitch, maxPitch, -33,33);
+ //roll 
+  newYPR[2] = map(ypr[2]-stdYPR[2], minRoll, maxRoll, -33,33); 
+
+}
 
 void errorMPUInitializationFailure() {
   boolean error[2] = {1,1};
