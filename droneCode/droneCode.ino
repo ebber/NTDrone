@@ -167,8 +167,8 @@ void setup() {
 }
  
  
-void loop() 
-{
+void loop() {
+  
     getYawPitchRoll(&ypr[0]); //fill acceleration array
     adjustYPR(&ypr[0], &adjYPR[0]);
     
@@ -193,7 +193,7 @@ void loop()
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
 int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
-  return (int) ( (pitch + roll+ yaw) * correctionMod);
+  return (int) ( (yaw + pitch + roll) * correctionMod);
 }
 
 
@@ -235,15 +235,18 @@ void adjustYPR(float* ypr, float* newYPR) {
  //roll 
   newYPR[2] = map(ypr[2]-stdYPR[2], minRoll, maxRoll, -33,33); 
 
+  return;
 }
 
 void errorMPUInitializationFailure() {
   boolean error[2] = {1,1};
   blinkErrorCode(&error[0],2);
+  return;
 }
 void errorDMPInitializationFailure() {
   boolean error[3] = {1,1,1};
   blinkErrorCode(&error[0],3);
+  return;
 }
 
 
@@ -259,6 +262,7 @@ void blinkErrorCode(boolean* errorCode, int len) {
     }
     delay(1000);
   }
+  return;
 }
 
 
@@ -315,6 +319,7 @@ void getYawPitchRoll(float *ypr) {
             Serial.println(ypr[2]);
         #endif
     }
+    return;
 }
 
 /* only for Red Bricks
@@ -338,7 +343,7 @@ void arm(Servo *motor) {
    for(int i=0; i<4;i++) {
       motor[i].writeMicroseconds(1000); //low throtle
    } 
-   
+   return;
    //end arming sequence
  }
 */
