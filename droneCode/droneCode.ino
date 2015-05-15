@@ -54,16 +54,16 @@ bool blinkState = false;
 // ================================================================
 // ===                      Constants                           ===
 // ================================================================
-const int minThorttle = 900; //base speed we are rotating the motor
-const int maxThorttle = 1000; //base speed we are rotating the motor
-int baseSpeed=980;
+const int minThorttle = 900; //min throttle
+const int maxThorttle = 2000; //max throttle
 
 
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
 const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
-const int maxAcclValue = 100; //experimentally detirmened
+
 const int minAcclValue = 0;  //experimentally detirmined
+const int maxAcclValue = 100; //experimentally detirmened
 
 const int minYaw = -180;  //TODO: Find real values
 const int maxYaw = 180;  //TODO: Find real Values
