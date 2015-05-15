@@ -61,7 +61,7 @@ int baseSpeed=980;
 
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
-const int launchSpeed = 1400; //iffy tested exact testing needed
+const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
 const int maxAcclValue = 100; //experimentally detirmened
 const int minAcclValue = 0;  //experimentally detirmined
 
@@ -113,7 +113,7 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 float adjYPR[3];        // [yaw, pitch, roll] adjusted based on calibration adn mapped to -33,33
 float stdYPR[3];       //base values when its flat
 
-int throttle=90; //goes from 0 to 100
+int throttle=700; //goes from 0 to 100
 
 
 Servo motor[4];
@@ -158,7 +158,6 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again
-  //arm(&motor[0]);
   
     //begin arming sequence
 
@@ -302,7 +301,7 @@ void getYawPitchRoll(float *ypr) {
     }
 }
 
-
+/* only for Red Bricks
 void arm(Servo *motor) {
     //begin arming sequence
    for(int i=0; i<4;i++) {
@@ -326,7 +325,7 @@ void arm(Servo *motor) {
    
    //end arming sequence
  }
-
+*/
 void setUpMPU() {
      // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
