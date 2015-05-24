@@ -75,7 +75,18 @@ const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
 //TODO1:Find true value
-const float correctionMod = 1; //stabilization modifier (ie correction factor multiplied by this value)
+const float correctionMod = 1.5; //stabilization modifier (ie correction factor multiplied by this value)
+
+
+const float calibrationPercision = 0.5;  //must be positive
+
+/*
+Your offsets:	-4592	-537	700	-1214	-18	0
+
+
+Data is printed as: acelX acelY acelZ giroX giroY giroZ
+
+*/
 
 
 
@@ -87,8 +98,8 @@ const float correctionMod = 1; //stabilization modifier (ie correction factor mu
 // ================================================================
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
+//#define OUTPUT_YPR_DIFERENCE
 //#define MOTOR_SPEEDS
-
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -114,7 +125,6 @@ VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measure
 VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float adjYPR[3];        // [yaw, pitch, roll] adjusted based on calibration adn mapped to -33,33
 float stdYPR[3];       //base values when its flat
 
 int throttle=700; //goes from 0 to 100
@@ -154,45 +164,72 @@ void setup() {
    #ifdef VERBOSE_SERIAL
       Serial.println(F("Calibrating yaw pitch roll"));
    #endif
-  filStdYPR(&stdYPR[0]); 
-   
+   //calibrate
+  calibrateYPR();
+  
+  
     // wait for ready
+    Serial.println(millis()/1000.);
     Serial.println(F("Press any key to begin: "));
+    digitalWrite(LED_PIN,HIGH);
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
-    while (Serial.available() && Serial.read()); // empty buffer again
-  
+    while (Serial.available() && Serial.read()); // empty buffer again  
     //begin arming sequence
 
-   
+  
+  
+ 
 }
  
  
 void loop() {
   
     getYawPitchRoll(&ypr[0]); //fill acceleration array
-    adjustYPR(&ypr[0], &adjYPR[0]);
+    
+    
+    #ifdef OUTPUT_YPR_DIFERENCE
+       for(int i=0;i<3; i++) {
+         Serial.print(ypr[i]-stdYPR[i]);
+         Serial.print(" ");
+       }   
+       Serial.println();
+    #endif
+    
     
     if(Serial.available()){
       throttle=Serial.parseInt()*10; //GOES FROM 90 TO 200
       if(throttle < 900 && throttle >2000) {
         throttle=0;
       }
-     
     }
 
 
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], adjYPR[2]-stdYPR[2]) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude(-adjYPR[0]-stdYPR[0], adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2])); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude(adjYPR[0]-stdYPR[0], -adjYPR[1]-stdYPR[1], -adjYPR[2]-stdYPR[2]));  //spin rotor D
+    spinRotor(motor[0], getSpeedChangeMagnitude(ypr[0]-stdYPR[0], -(ypr[1]-stdYPR[1]), ypr[2]-stdYPR[2]) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude(-(ypr[0]-stdYPR[0]), ypr[1]-stdYPR[1], ypr[2]-stdYPR[2]) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude(-(ypr[0]-stdYPR[0]), ypr[1]-stdYPR[1], -(ypr[2]-stdYPR[2]))); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude(ypr[0]-stdYPR[0], -(ypr[1]-stdYPR[1]), -(ypr[2]-stdYPR[2])));  //spin rotor D
+    #ifdef MOTOR_SPEEDS
+      Serial.println();
+    #endif 
     interrupts();
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
 int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
-  return (int) ( (yaw + pitch + roll) * correctionMod);
+
+  //adjust values to -33 to 33 (so total is -99 or 99)
+   //yaw
+  yaw = map(yaw, minYaw, maxYaw, -33,33); 
+  //pitch
+  pitch = map(pitch, minPitch, maxPitch, -33,33);
+ //roll 
+  roll = map(roll, minRoll, maxRoll, -33,33);
+  
+  int cor = (int) ( (yaw + pitch + roll) * correctionMod);
+  return cor;
+  
 }
 
 
@@ -210,36 +247,93 @@ int spinRotor(Servo motor, int speedChange) {
   return spedeSent;
 }
 
-void filStdYPR(float* stdYPR) {
 
+void calibrateYPR() {
+  bool calibrated=false;
+  int trials = 6;
+  do{
+    filStdYPR(&stdYPR[0]); 
+   
+   if(testStdYPR(&stdYPR[0],trials)) {
+     
+     filStdYPR(&stdYPR[0]);
+     calibrated=testStdYPR(&stdYPR[0],3);
+     calibrated = true;
+   } 
+   
+   
+   }while(!calibrated);
+   
+}
+
+bool testStdYPR(float *YPR, int trials) {
+  //just to make sure its not crazy
+  if( abs(YPR[0]+YPR[1]+YPR[2]) > abs(maxYaw+maxPitch+maxRoll)) {
+    Serial.println("Crazy!");
+    return false;
+  }
+      
+  int trial = trials;
+
+     while(trial>0) {
+
+     while( !getYawPitchRoll(&ypr[0]) ){} //fill acceleration array with a new packet
+       
+       #ifdef OUTPUT_YPR_DIFERENCE
+         for(int i=0;i<3; i++) {
+           Serial.print(ypr[i]-YPR[i]);
+           Serial.print("\t");
+         }   
+         Serial.println();
+      #endif
+       
+        if( (abs(ypr[0]-YPR[0]) < calibrationPercision) &&  (abs(ypr[1]-YPR[1]) < calibrationPercision) && (abs(ypr[2]-YPR[2]) < calibrationPercision) ) {
+         trial--; 
+         delay(150); //if 100, it breaks, and ypr[i]-stdYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
+        } else {
+         return false; //this isnt a good std, break out 
+        }
+     }
+     
+     return true;
+  
+}
+
+void filStdYPR(float *stdYPR) {
+
+  //give blank slate
+  stdYPR[0]=0.8;
+  stdYPR[1]=0.0;
+  stdYPR[2]=0.0;
+  
  //average of 20 values, weighted towards the newest values
+ 
  int i = 0;
  float tempYPR[3];
  while(i<20) {
    //if mpu has signaled its ready or theres a packet waiting
-   if (mpuInterrupt || fifoCount > packetSize) {
-    getYawPitchRoll(&tempYPR[0]);
-    stdYPR[0] = (2*stdYPR[0]+tempYPR[0])/3;  
-    stdYPR[1] = (2*stdYPR[1]+tempYPR[1])/3;  
-    stdYPR[2] = (2*stdYPR[2]+tempYPR[2])/3;  
+    while(!getYawPitchRoll(&tempYPR[0])) {delay(3);}
+    
+    if(abs(tempYPR[0]) < 10000.0) { //no overflow. shouldnt be over 10,000.0
+      stdYPR[0] = (2.0*stdYPR[0]+tempYPR[0])/3.0;  
+    }
+    
+    if(abs(tempYPR[1]) < 10000.0) { //to stop overflow - shouldnt be over 10,000.0
+      stdYPR[1] = (2.0*stdYPR[1]+tempYPR[1])/3.0;  
+    } 
+    
+    if(abs(tempYPR[2]) < 10000.0) { //to stop overflow on the float - shouldnt be over 10,000.0
+      stdYPR[2] = (2.0*stdYPR[2]+tempYPR[2])/3.0;  
+    } 
+    
 
-    i++;
-   }
+    
+    i++;  
  }
  return;
 }
 
 
-void adjustYPR(float* ypr, float* newYPR) {
- //yaw
-  newYPR[0] = map(ypr[0]-stdYPR[0], minYaw, maxYaw, -33,33); 
-  //pitch
-  newYPR[1] = map(ypr[1]-stdYPR[1], minPitch, maxPitch, -33,33);
- //roll 
-  newYPR[2] = map(ypr[2]-stdYPR[2], minRoll, maxRoll, -33,33); 
-
-  return;
-}
 
 void errorMPUInitializationFailure() {
   boolean error[2] = {1,1};
@@ -271,14 +365,16 @@ void blinkErrorCode(boolean* errorCode, int len) {
 
 //0 is yaw, 1 is pitch, 2 is roll
 //ypr must be a array size 3
-void getYawPitchRoll(float *ypr) {
+//returns true if new packet, else returns false
+bool getYawPitchRoll(float *ypr) {
 // if programming failed, don't try to do anything
-    if (!dmpReady) return;
+    if (!dmpReady) return false;
 
     // if MPU interrupt or extra packet(s) not available, exit function
     if (!mpuInterrupt && fifoCount < packetSize) {
-      return;
+      return false;
     }
+
     
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus();
@@ -314,6 +410,8 @@ void getYawPitchRoll(float *ypr) {
             
         #ifdef OUTPUT_READABLE_YAWPITCHROLL
             // display Euler angles in degrees
+            
+
             Serial.print("ypr\t");
             Serial.print(ypr[0]);
             Serial.print("\t");
@@ -322,7 +420,8 @@ void getYawPitchRoll(float *ypr) {
             Serial.println(ypr[2]);
         #endif
     }
-    return;
+
+    return true;
 }
 
 /* only for Red Bricks
@@ -386,10 +485,14 @@ void setUpMPU() {
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
-    mpu.setXGyroOffset(0);
+    mpu.setXAccelOffset(-4592);
+    mpu.setXAccelOffset(-537);
+    mpu.setZAccelOffset(700); // 1688 factory default for my test chip
+    mpu.setXGyroOffset(-1214);
     mpu.setYGyroOffset(-82);
     mpu.setZGyroOffset(0);
-    mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
+    
+
 
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
@@ -422,6 +525,14 @@ void setUpMPU() {
         errorDMPInitializationFailure();
        
     }
+}
+
+
+bool isMPUStable() {
+  float ypr[3];
+  getYawPitchRoll(&ypr[0]);
+  delay(500);
+  return testStdYPR(ypr,20);
 }
 
  
