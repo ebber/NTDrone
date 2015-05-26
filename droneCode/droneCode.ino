@@ -75,13 +75,17 @@ const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
 //TODO1:Find true value
-const float correctionMod = 1.5; //stabilization modifier (ie correction factor multiplied by this value)
+const float correctionMod = 4; //stabilization modifier (ie correction factor multiplied by this value)
+const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
 
 
-const float calibrationPercision = 0.5;  //must be positive
+const float calibrationPercision = 0.2;  //must be positive
 
 /*
 Your offsets:	-4592	-537	700	-1214	-18	0
+-4550	-523	753	-1269	-23	-2
+-4548	-526	751	-1267	-22	-2
+
 
 
 Data is printed as: acelX acelY acelZ giroX giroY giroZ
@@ -99,7 +103,8 @@ Data is printed as: acelX acelY acelZ giroX giroY giroZ
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-//#define MOTOR_SPEEDS
+#define MOTOR_SPEEDS
+
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -144,6 +149,7 @@ void dmpDataReady() {
 
 
 void setup() { 
+  setUpMPU();
   motor[0].attach(motor0Pin);    // attached to pin 
   motor[1].attach(motor1Pin);    // attached to pin 
   motor[2].attach(motor2Pin);    // attached to pin 
@@ -155,8 +161,6 @@ void setup() {
 
   //9600 is magical. Havent tested to see if any other baud rate is not magical
   Serial.begin(9600);
-  setUpMPU();
-  
      for(int i=0; i<4;i++) {
       motor[i].writeMicroseconds(armSpeed); //low throtle
    } 
@@ -165,6 +169,7 @@ void setup() {
       Serial.println(F("Calibrating yaw pitch roll"));
    #endif
    //calibrate
+   //while(!isMPUStable()) {}
   calibrateYPR();
   
   
@@ -199,7 +204,15 @@ void loop() {
     
     if(Serial.available()){
       throttle=Serial.parseInt()*10; //GOES FROM 90 TO 200
-      if(throttle < 900 && throttle >2000) {
+      if(throttle<0) { //calibrate
+          Serial.println("Calibrating");
+          calibrateYPR();
+          Serial.println(F("Press any key to begin: "));
+          while (Serial.available() && Serial.read()); // empty buffer
+          while (!Serial.available());                 // wait for data
+          while (Serial.available() && Serial.read()); // empty buffer again
+
+      }else if(throttle < 900 || throttle > 2000) {
         throttle=0;
       }
     }
@@ -221,13 +234,13 @@ int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
 
   //adjust values to -33 to 33 (so total is -99 or 99)
    //yaw
-  yaw = map(yaw, minYaw, maxYaw, -33,33); 
+  yaw = mapFloat(yaw, minYaw, maxYaw, -33* yawCorrectionMod,33 * yawCorrectionMod); 
   //pitch
-  pitch = map(pitch, minPitch, maxPitch, -33,33);
+  pitch = mapFloat(pitch, minPitch, maxPitch, -33* correctionMod,33 * correctionMod);
  //roll 
-  roll = map(roll, minRoll, maxRoll, -33,33);
+  roll = mapFloat(roll, minRoll, maxRoll, -33* correctionMod,33 * correctionMod);
   
-  int cor = (int) ( (yaw + pitch + roll) * correctionMod);
+  int cor = (int) ( (yaw + pitch + roll) );
   return cor;
   
 }
@@ -250,18 +263,15 @@ int spinRotor(Servo motor, int speedChange) {
 
 void calibrateYPR() {
   bool calibrated=false;
-  int trials = 6;
+  int trials;
   do{
-    filStdYPR(&stdYPR[0]); 
-   
-   if(testStdYPR(&stdYPR[0],trials)) {
-     
-     filStdYPR(&stdYPR[0]);
-     calibrated=testStdYPR(&stdYPR[0],3);
-     calibrated = true;
-   } 
-   
-   
+      trials=16;
+     do {
+       filStdYPR(&stdYPR[0]);
+       delay(100);
+       trials=trials/2;
+     } while( testStdYPR(&stdYPR[0],trials) && trials > 4 );
+   calibrated = trials <= 4;
    }while(!calibrated);
    
 }
@@ -274,11 +284,14 @@ bool testStdYPR(float *YPR, int trials) {
   }
       
   int trial = trials;
-
+  
+    float yDif=0;
+    float pDif=0;
+    float rDif=0;
+    
      while(trial>0) {
 
-     while( !getYawPitchRoll(&ypr[0]) ){} //fill acceleration array with a new packet
-       
+     while( !getYawPitchRoll(&ypr[0]) ){delay(10);} //fill acceleration array with a new packet
        #ifdef OUTPUT_YPR_DIFERENCE
          for(int i=0;i<3; i++) {
            Serial.print(ypr[i]-YPR[i]);
@@ -286,15 +299,25 @@ bool testStdYPR(float *YPR, int trials) {
          }   
          Serial.println();
       #endif
+      delay(200);
+
        
-        if( (abs(ypr[0]-YPR[0]) < calibrationPercision) &&  (abs(ypr[1]-YPR[1]) < calibrationPercision) && (abs(ypr[2]-YPR[2]) < calibrationPercision) ) {
+       yDif=ypr[0]-YPR[0];
+       pDif=ypr[1]-YPR[1];
+       rDif=ypr[2]-YPR[2];
+
+       
+        if( (abs(yDif) < calibrationPercision) &&  (abs(pDif) < calibrationPercision) && (abs(rDif) < calibrationPercision) ) {
          trial--; 
          delay(150); //if 100, it breaks, and ypr[i]-stdYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
+
         } else {
+          Serial.println("FAILLLLl");
          return false; //this isnt a good std, break out 
         }
      }
      
+
      return true;
   
 }
@@ -325,8 +348,6 @@ void filStdYPR(float *stdYPR) {
     if(abs(tempYPR[2]) < 10000.0) { //to stop overflow on the float - shouldnt be over 10,000.0
       stdYPR[2] = (2.0*stdYPR[2]+tempYPR[2])/3.0;  
     } 
-    
-
     
     i++;  
  }
@@ -424,31 +445,6 @@ bool getYawPitchRoll(float *ypr) {
     return true;
 }
 
-/* only for Red Bricks
-void arm(Servo *motor) {
-    //begin arming sequence
-   for(int i=0; i<4;i++) {
-      motor[i].writeMicroseconds(1000); //low throtle
-   } 
-   
-   delay(5000); //5 seconds is overkill, but want to be sure. This must be written after 4 beeps
-
-  
-  Serial.begin(9600);    // start serial at 9600 baud
-  
-   for(int i=0; i<4;i++) {
-      motor[i].writeMicroseconds(2000); //high throtle
-   } 
-   
-   delay(50); //let it get up to speed/register but dont let if lift
-   
-   for(int i=0; i<4;i++) {
-      motor[i].writeMicroseconds(1000); //low throtle
-   } 
-   return;
-   //end arming sequence
- }
-*/
 void setUpMPU() {
      // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
@@ -471,26 +467,20 @@ void setUpMPU() {
       errorMPUInitializationFailure();
     }
 
-  /*
-    // wait for ready
-    Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-    while (Serial.available() && Serial.read()); // empty buffer
-    while (!Serial.available());                 // wait for data
-    while (Serial.available() && Serial.read()); // empty buffer again
-  */
     // load and configure the DMP
     #ifdef VERBOSE_SERIAL    
       Serial.println(F("Initializing DMP..."));
     #endif
+    
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
-    mpu.setXAccelOffset(-4592);
-    mpu.setXAccelOffset(-537);
-    mpu.setZAccelOffset(700); // 1688 factory default for my test chip
-    mpu.setXGyroOffset(-1214);
-    mpu.setYGyroOffset(-82);
-    mpu.setZGyroOffset(0);
+    mpu.setXAccelOffset(-4537);
+    mpu.setYAccelOffset(-540);
+    mpu.setZAccelOffset(738); // 1688 factory default for my test chip
+    mpu.setXGyroOffset(-1257);
+    mpu.setYGyroOffset(-22);
+    mpu.setZGyroOffset(-2);
     
 
 
@@ -529,10 +519,54 @@ void setUpMPU() {
 
 
 bool isMPUStable() {
-  float ypr[3];
-  getYawPitchRoll(&ypr[0]);
-  delay(500);
-  return testStdYPR(ypr,20);
+  float YPR[3];
+  while(! getYawPitchRoll(&YPR[0])){}
+  delay(1500);
+   int trial = 8;
+  
+  //accumalate the error ic case its all going in 1 direction
+    float yDif=0;
+    float pDif=0;
+    float rDif=0;
+    
+     while(trial>0) {
+
+     while( !getYawPitchRoll(&ypr[0]) ){delay(10);} //fill acceleration array with a new packet
+       #ifdef OUTPUT_YPR_DIFERENCE
+         for(int i=0;i<3; i++) {
+           Serial.print(ypr[i]-YPR[i]);
+           Serial.print("\t");
+         }   
+         Serial.println();
+      #endif
+      delay(200);
+
+       
+       yDif=ypr[0]-YPR[0];
+       pDif=yDif+ypr[1]-YPR[1];
+       rDif=yDif+ ypr[2]-YPR[2];
+
+       
+        if( (abs(yDif)/(float)trial < 10) &&  (abs(pDif)/trial < 10) && (abs(rDif)/trial < 10) ) {
+         trial--; 
+         delay(150); //if 100, it breaks, and ypr[i]-stdYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
+
+        } else {
+          Serial.print(yDif);
+          Serial.println("\t a");
+         return false; //this isnt a good std, break out 
+        }
+     }
+     
+     
+     Serial.print("\n \n");
+
+     return true;
+}
+
+float mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+ return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
  
