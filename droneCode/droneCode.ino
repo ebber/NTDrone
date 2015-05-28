@@ -57,6 +57,12 @@ bool blinkState = false;
 const int minThorttle = 900; //min throttle
 const int maxThorttle = 2000; //max throttle
 
+const int m0YPR[] = { 1, -1,  1};
+const int m1YPR[] = {-1,  1,  1};
+const int m2YPR[] = {-1,  1, -1};
+const int m3YPR[] = { 1, -1, -1};
+
+
 
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
@@ -75,11 +81,11 @@ const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
 //TODO1:Find true value
-const float correctionMod = 4; //stabilization modifier (ie correction factor multiplied by this value)
+const float correctionMod = 1.0; //stabilization modifier (ie correction factor multiplied by this value)
 const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
 
 
-const float calibrationPercision = 0.2;  //must be positive
+const float calibrationPercision = 0.1;  //must be positive
 
 /*
 Your offsets:	-4592	-537	700	-1214	-18	0
@@ -211,6 +217,7 @@ void loop() {
           while (Serial.available() && Serial.read()); // empty buffer
           while (!Serial.available());                 // wait for data
           while (Serial.available() && Serial.read()); // empty buffer again
+          throttle=700;
 
       }else if(throttle < 900 || throttle > 2000) {
         throttle=0;
@@ -219,11 +226,16 @@ void loop() {
 
 
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude(ypr[0]-stdYPR[0], -(ypr[1]-stdYPR[1]), ypr[2]-stdYPR[2]) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude(-(ypr[0]-stdYPR[0]), ypr[1]-stdYPR[1], ypr[2]-stdYPR[2]) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude(-(ypr[0]-stdYPR[0]), ypr[1]-stdYPR[1], -(ypr[2]-stdYPR[2]))); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude(ypr[0]-stdYPR[0], -(ypr[1]-stdYPR[1]), -(ypr[2]-stdYPR[2])));  //spin rotor D
+    spinRotor(motor[0], getSpeedChangeMagnitude( m0YPR[0]*(ypr[0]-stdYPR[0]),  m0YPR[1]*(ypr[1]-stdYPR[1]),  m0YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor A
+    spinRotor(motor[1], getSpeedChangeMagnitude( m1YPR[0]*(ypr[0]-stdYPR[0]),  m1YPR[1]*(ypr[1]-stdYPR[1]),  m1YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor B
+    spinRotor(motor[2], getSpeedChangeMagnitude( m2YPR[0]*(ypr[0]-stdYPR[0]),  m2YPR[1]*(ypr[1]-stdYPR[1]),  m2YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor C
+    spinRotor(motor[3], getSpeedChangeMagnitude( m3YPR[0]*(ypr[0]-stdYPR[0]),  m3YPR[1]*(ypr[1]-stdYPR[1]),  m3YPR[2]*(ypr[2]-stdYPR[2]) ) );  //spin rotor D
     #ifdef MOTOR_SPEEDS
+       Serial.print("\t");
+       for(int i=0;i<3; i++) {
+         Serial.print(ypr[i]-stdYPR[i]);
+         Serial.print("\t");
+       }  
       Serial.println();
     #endif 
     interrupts();
@@ -253,7 +265,7 @@ int spinRotor(Servo motor, int speedChange) {
   
   #ifdef MOTOR_SPEEDS
     Serial.print(spedeSent);
-    Serial.print("    ");
+    Serial.print("\t");
   #endif
   
   motor.writeMicroseconds(spedeSent);
@@ -553,7 +565,6 @@ bool isMPUStable() {
 
         } else {
           Serial.print(yDif);
-          Serial.println("\t a");
          return false; //this isnt a good std, break out 
         }
      }
