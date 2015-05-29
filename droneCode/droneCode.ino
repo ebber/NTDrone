@@ -91,7 +91,7 @@ const float dCorrectionMod = 0.4;  //take the derivitive of ypr, this is weighti
 const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
 
 
-const float calibrationPercision = 0.3;  //must be positive
+const float calibrationPercision = 0.1;  //must be positive
 
 /*
 Your offsets:	-4592	-537	700	-1214	-18	0
