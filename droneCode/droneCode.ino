@@ -56,14 +56,16 @@ bool blinkState = false;
 // ================================================================
 const int minThorttle = 900; //min throttle
 const int maxThorttle = 2000; //max throttle
-
+/*
 const int m0YPR[] = { 1, -1,  1};
 const int m1YPR[] = {-1,  1,  1};
 const int m2YPR[] = {-1,  1, -1};
 const int m3YPR[] = { 1, -1, -1};
+redone below, values assigned at beggining of setUp()
+*/
+int mYPR[4][3];
 
-
-
+        
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
 const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
@@ -80,12 +82,16 @@ const int maxPitch = 60; //TODO: find real Values
 const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
+
+const int predictPoints=5;
 //TODO1:Find true value
-const float correctionMod = 1.0; //stabilization modifier (ie correction factor multiplied by this value)
+const float correctionMod = 0.6; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float dCorrectionMod = 0.4;  //take the derivitive of ypr, this is weighting
+
 const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
 
 
-const float calibrationPercision = 0.1;  //must be positive
+const float calibrationPercision = 0.3;  //must be positive
 
 /*
 Your offsets:	-4592	-537	700	-1214	-18	0
@@ -110,6 +116,7 @@ Data is printed as: acelX acelY acelZ giroX giroY giroZ
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
 #define MOTOR_SPEEDS
+//#define MOTOR_SPEEDS1
 
 
 // class default I2C address is 0x68
@@ -138,11 +145,15 @@ float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float stdYPR[3];       //base values when its flat
 
+bool newData = false;
+
+
 int throttle=700; //goes from 0 to 100
 
 
 Servo motor[4];
-
+float mSpeed[4][predictPoints+1];    //stores old values of ypr, ypr is most current then oldYPR[0] then oldYPR[1]. motor 1,2,3,4 and then [x][0] is speed current, [x][1] is speed
+float mSpeedP[4];
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -155,7 +166,25 @@ void dmpDataReady() {
 
 
 void setup() { 
+  //stupid arduino wont initialize 2D arrays
+  //set motor multipliers (how a change efects motor speed). 
+  int buffer[4][3] = { { 1, -1,  1}, //1
+                       {-1,  1,  1}, //1
+                       {-1,  1, -1},  //-1
+                       { 1, -1, -1}  };  //-1
+           
+           //fill array
+    for (int x=0; x<4; x++){
+     for (int y=0; y<3; y++){
+       mYPR[x][y] = buffer[x][y];
+     }
+    }
+        
+        
+  //actualy setup()
+  
   setUpMPU();
+  
   motor[0].attach(motor0Pin);    // attached to pin 
   motor[1].attach(motor1Pin);    // attached to pin 
   motor[2].attach(motor2Pin);    // attached to pin 
@@ -165,7 +194,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   
 
-  //9600 is magical. Havent tested to see if any other baud rate is not magical
+  //9600 is magical. Havent tested to see if any other baud rate are not magical
   Serial.begin(9600);
      for(int i=0; i<4;i++) {
       motor[i].writeMicroseconds(armSpeed); //low throtle
@@ -174,8 +203,8 @@ void setup() {
    #ifdef VERBOSE_SERIAL
       Serial.println(F("Calibrating yaw pitch roll"));
    #endif
+   
    //calibrate
-   //while(!isMPUStable()) {}
   calibrateYPR();
   
   
@@ -186,17 +215,15 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again  
-    //begin arming sequence
+  
 
-  
-  
  
 }
  
  
 void loop() {
   
-    getYawPitchRoll(&ypr[0]); //fill acceleration array
+    newData=getYawPitchRoll(&ypr[0]); //fill acceleration array, and return if we got new data
     
     
     #ifdef OUTPUT_YPR_DIFERENCE
@@ -224,35 +251,75 @@ void loop() {
       }
     }
 
-
+    if(newData) {
+      updateSpeeds();
+    
+    
     noInterrupts();
-    spinRotor(motor[0], getSpeedChangeMagnitude( m0YPR[0]*(ypr[0]-stdYPR[0]),  m0YPR[1]*(ypr[1]-stdYPR[1]),  m0YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor A
-    spinRotor(motor[1], getSpeedChangeMagnitude( m1YPR[0]*(ypr[0]-stdYPR[0]),  m1YPR[1]*(ypr[1]-stdYPR[1]),  m1YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor B
-    spinRotor(motor[2], getSpeedChangeMagnitude( m2YPR[0]*(ypr[0]-stdYPR[0]),  m2YPR[1]*(ypr[1]-stdYPR[1]),  m2YPR[2]*(ypr[2]-stdYPR[2]) ) ); //spin rotor C
-    spinRotor(motor[3], getSpeedChangeMagnitude( m3YPR[0]*(ypr[0]-stdYPR[0]),  m3YPR[1]*(ypr[1]-stdYPR[1]),  m3YPR[2]*(ypr[2]-stdYPR[2]) ) );  //spin rotor D
-    #ifdef MOTOR_SPEEDS
-       Serial.print("\t");
-       for(int i=0;i<3; i++) {
+    spinRotor(motor[0], mSpeed[0][0] ); //spin rotor A
+    spinRotor(motor[1], mSpeed[1][0] ); //spin rotor B
+    spinRotor(motor[2], mSpeed[2][0]); //spin rotor C
+    spinRotor(motor[3], mSpeed[3][0] );  //spin rotor D
+    
+    
+    #ifdef MOTOR_SPEEDS1
+    
+       for(int i=1;i<2; i++) {
+         Serial.print((int) mSpeed[i][0]);
+         Serial.print("\t");
+       }  
+       
+       for(int i=1;i<2; i++) {
          Serial.print(ypr[i]-stdYPR[i]);
          Serial.print("\t");
        }  
+       
+       for(int i=1;i<2; i++) {
+         Serial.print((int) mSpeedP[i]);
+         Serial.print("\t");
+       }  
+       
       Serial.println();
-    #endif 
+    #endif
+   
+   #ifdef MOTOR_SPEEDS
+    Serial.println();
+   #endif 
+    
+
+    
     interrupts();
+    }
+}
+
+void updateSpeeds() {
+  
+    for (int i=0; i<4;i++) {
+      mSpeed[i][0] = correctionMod*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ) //from instantaneous
+                 + dCorrectionMod*( ( (mSpeed[i][0]-mSpeed[i][predictPoints])/predictPoints)*1.7 + mSpeed[i][0] ); //slope*points+y1
+  
+      mSpeedP[i]= 1*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ); //from instantaneous
+  
+  }
+  for (int t=predictPoints;t>0;t--) {
+    for(int i=0;i<4;i++) {
+     mSpeed[i][t]=mSpeed[i][t-1]; 
+    }
+  }
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
-int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
+float getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
 
   //adjust values to -33 to 33 (so total is -99 or 99)
    //yaw
-  yaw = mapFloat(yaw, minYaw, maxYaw, -33* yawCorrectionMod,33 * yawCorrectionMod); 
+  yaw = mapFloat(yaw, minYaw, maxYaw, -33.0* yawCorrectionMod / 1.0, 33.0 * yawCorrectionMod / 1.0); //to account for multiplying by correction factor when retruned
   //pitch
-  pitch = mapFloat(pitch, minPitch, maxPitch, -33* correctionMod,33 * correctionMod);
+  pitch = mapFloat(pitch, minPitch, maxPitch, -33.0, 33.0);
  //roll 
-  roll = mapFloat(roll, minRoll, maxRoll, -33* correctionMod,33 * correctionMod);
+  roll = mapFloat(roll, minRoll, maxRoll, -33.0, 33.0);
   
-  int cor = (int) ( (yaw + pitch + roll) );
+  float cor = (yaw + pitch + roll);
   return cor;
   
 }
@@ -260,8 +327,8 @@ int getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
 
  
 // speed change is number, give max and min to make it releative, controls motorA
-int spinRotor(Servo motor, int speedChange) {
-  int spedeSent = speedChange+throttle;
+int spinRotor(Servo motor, float speedChange) {
+  int spedeSent = (int) speedChange+throttle;
   
   #ifdef MOTOR_SPEEDS
     Serial.print(spedeSent);
@@ -337,7 +404,7 @@ bool testStdYPR(float *YPR, int trials) {
 void filStdYPR(float *stdYPR) {
 
   //give blank slate
-  stdYPR[0]=0.8;
+  stdYPR[0]=0.0;
   stdYPR[1]=0.0;
   stdYPR[2]=0.0;
   
@@ -399,7 +466,7 @@ void blinkErrorCode(boolean* errorCode, int len) {
 //0 is yaw, 1 is pitch, 2 is roll
 //ypr must be a array size 3
 //returns true if new packet, else returns false
-bool getYawPitchRoll(float *ypr) {
+bool getYawPitchRoll(float *YPR) {
 // if programming failed, don't try to do anything
     if (!dmpReady) return false;
 
@@ -436,21 +503,21 @@ bool getYawPitchRoll(float *ypr) {
 
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            ypr[0]=ypr[0] * 180/M_PI;
-            ypr[1]=ypr[1] * 180/M_PI;
-            ypr[2]=ypr[2] * 180/M_PI;
+            mpu.dmpGetYawPitchRoll(YPR, &q, &gravity);
+            YPR[0]=YPR[0] * 180/M_PI;
+            YPR[1]=YPR[1] * 180/M_PI;
+            YPR[2]=YPR[2] * 180/M_PI;
             
         #ifdef OUTPUT_READABLE_YAWPITCHROLL
             // display Euler angles in degrees
             
 
             Serial.print("ypr\t");
-            Serial.print(ypr[0]);
+            Serial.print(YPR[0]);
             Serial.print("\t");
-            Serial.print(ypr[1]);
+            Serial.print(YPR[1]);
             Serial.print("\t");
-            Serial.println(ypr[2]);
+            Serial.println(YPR[2]);
         #endif
     }
 
