@@ -83,10 +83,10 @@ const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
 
-const int predictPoints=5;
+const int oldPoints=3;  //history of old motor speed points
 //TODO1:Find true value
-const float correctionMod = 0.6; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float dCorrectionMod = 0.4;  //take the derivitive of ypr, this is weighting
+const float correctionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float dCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
 
 const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
 
@@ -115,8 +115,8 @@ Data is printed as: acelX acelY acelZ giroX giroY giroZ
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-#define MOTOR_SPEEDS
-//#define MOTOR_SPEEDS1
+//#define MOTOR_SPEEDS
+#define MOTOR_SPEEDS1
 
 
 // class default I2C address is 0x68
@@ -152,7 +152,7 @@ int throttle=700; //goes from 0 to 100
 
 
 Servo motor[4];
-float mSpeed[4][predictPoints+1];    //stores old values of ypr, ypr is most current then oldYPR[0] then oldYPR[1]. motor 1,2,3,4 and then [x][0] is speed current, [x][1] is speed
+float mSpeed[4][oldPoints+1];    //stores old values of ypr, ypr is most current then oldYPR[0] then oldYPR[1]. motor 1,2,3,4 and then [x][0] is speed current, [x][1] is speed
 float mSpeedP[4];
 
 // ================================================================
@@ -296,16 +296,56 @@ void updateSpeeds() {
   
     for (int i=0; i<4;i++) {
       mSpeed[i][0] = correctionMod*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ) //from instantaneous
-                 + dCorrectionMod*( ( (mSpeed[i][0]-mSpeed[i][predictPoints])/predictPoints)*1.7 + mSpeed[i][0] ); //slope*points+y1
+                 + dCorrectionMod*getDComponent(&mSpeed[i][0], oldPoints, i); //
   
       mSpeedP[i]= 1*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ); //from instantaneous
   
   }
-  for (int t=predictPoints;t>0;t--) {
+  for (int t=oldPoints; t>0; t--) {
     for(int i=0;i<4;i++) {
      mSpeed[i][t]=mSpeed[i][t-1]; 
     }
   }
+}
+
+
+//old speed is an array of speeds where [0] is most current and [numOfPoints-1] is oldest
+//predictAhead predicts how many points ahead there are
+//TODO: make it so if we have extra points in our history, get a better taylor series
+float getDComponent(float* oldValues, int numOfPoints, int motor) {
+  float predictAhead=1.0;
+
+     //get the derivatives 
+     float d[numOfPoints][numOfPoints];
+    //fill the base
+    for(int i=0;i<numOfPoints-1;i++) {
+     d[0][i]=oldValues[i]; 
+    }
+    
+    for (int i=1;i<numOfPoints;i++) {
+      for(int j=0; j<numOfPoints-i; j++) {
+        d[i][j]=d[i-1][j+1]-d[i-1][j]; //technically divided by 1 
+      }
+    }
+
+  float futurePoint = d[0][0];
+  for(int i=1; i<numOfPoints-1;i++) {
+   futurePoint = futurePoint + d[i][0] /**pow(1,i)*/ /( (float) factorial(i) ); 
+  }
+  if(motor==1) {
+    Serial.print(futurePoint);
+    Serial.print("\t");
+  }
+  return futurePoint;
+  
+}
+
+int factorial(int n) {
+ if(n>2) {
+  return n*factorial(n-1);
+ } else {
+   return n;
+ }
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
