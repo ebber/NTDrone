@@ -83,12 +83,18 @@ const int minRoll = -70; //TODO: find real Values
 const int maxRoll = 70; //TODO: find real Values
 
 
-const int oldPoints=3;  //history of old motor speed points
 //TODO1:Find true value
-const float correctionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float dCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
+const float yawPCorrectionMod = 0.0; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float yawDCorrectionMod = 0.0;  //take the derivitive of ypr, this is weighting
 
-const float yawCorrectionMod = 0; //stabilization modifier (ie correction factor multiplied by this value)
+
+const float pitchPCorrectionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float pitchDCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
+
+const float rollPCorrectionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float rollDCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
+
+
 
 
 const float calibrationPercision = 0.1;  //must be positive
@@ -143,7 +149,10 @@ VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measure
 VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float stdYPR[3];       //base values when its flat
+float targetYPR[3];       //base values when its flat
+
+float oldYPR[3];
+float adjYPRerr[3];
 
 bool newData = false;
 
@@ -152,8 +161,7 @@ int throttle=700; //goes from 0 to 100
 
 
 Servo motor[4];
-float mSpeed[4][oldPoints+1];    //stores old values of ypr, ypr is most current then oldYPR[0] then oldYPR[1]. motor 1,2,3,4 and then [x][0] is speed current, [x][1] is speed
-float mSpeedP[4];
+float mSpeed[4];
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -228,7 +236,7 @@ void loop() {
     
     #ifdef OUTPUT_YPR_DIFERENCE
        for(int i=0;i<3; i++) {
-         Serial.print(ypr[i]-stdYPR[i]);
+         Serial.print(ypr[i]-targetYPR[i]);
          Serial.print(" ");
        }   
        Serial.println();
@@ -252,32 +260,32 @@ void loop() {
     }
 
     if(newData) {
-      updateSpeeds();
+      
+      
+   for (int i=0; i<4;i++) {
+      mSpeed[i]= getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-targetYPR[0]),  mYPR[i][1]*(ypr[1]-targetYPR[1]),  mYPR[i][2]*(ypr[2]-targetYPR[2]) ); //from instantaneous
+    }
     
     
     noInterrupts();
-    spinRotor(motor[0], mSpeed[0][0] ); //spin rotor A
-    spinRotor(motor[1], mSpeed[1][0] ); //spin rotor B
-    spinRotor(motor[2], mSpeed[2][0]); //spin rotor C
-    spinRotor(motor[3], mSpeed[3][0] );  //spin rotor D
+    spinRotor(motor[0], mSpeed[0]); //spin rotor A
+    spinRotor(motor[1], mSpeed[1]); //spin rotor B
+    spinRotor(motor[2], mSpeed[2]); //spin rotor C
+    spinRotor(motor[3], mSpeed[3]);  //spin rotor D
     
     
     #ifdef MOTOR_SPEEDS1
     
        for(int i=1;i<2; i++) {
-         Serial.print((int) mSpeed[i][0]);
+         Serial.print((int) mSpeed[i]);
          Serial.print("\t");
        }  
        
        for(int i=1;i<2; i++) {
-         Serial.print(ypr[i]-stdYPR[i]);
+         Serial.print(ypr[i]-targetYPR[i]);
          Serial.print("\t");
        }  
-       
-       for(int i=1;i<2; i++) {
-         Serial.print((int) mSpeedP[i]);
-         Serial.print("\t");
-       }  
+        
        
       Serial.println();
     #endif
@@ -290,22 +298,6 @@ void loop() {
     
     interrupts();
     }
-}
-
-void updateSpeeds() {
-  
-    for (int i=0; i<4;i++) {
-      mSpeed[i][0] = correctionMod*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ) //from instantaneous
-                 + dCorrectionMod*getDComponent(&mSpeed[i][0], oldPoints, i); //
-  
-      mSpeedP[i]= 1*getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-stdYPR[0]),  mYPR[i][1]*(ypr[1]-stdYPR[1]),  mYPR[i][2]*(ypr[2]-stdYPR[2]) ); //from instantaneous
-  
-  }
-  for (int t=oldPoints; t>0; t--) {
-    for(int i=0;i<4;i++) {
-     mSpeed[i][t]=mSpeed[i][t-1]; 
-    }
-  }
 }
 
 
@@ -386,10 +378,10 @@ void calibrateYPR() {
   do{
       trials=16;
      do {
-       filStdYPR(&stdYPR[0]);
+       filStdYPR(&targetYPR[0]);
        delay(100);
        trials=trials/2;
-     } while( testStdYPR(&stdYPR[0],trials) && trials > 4 );
+     } while( testStdYPR(&targetYPR[0],trials) && trials > 4 );
    calibrated = trials <= 4;
    }while(!calibrated);
    
@@ -428,7 +420,7 @@ bool testStdYPR(float *YPR, int trials) {
        
         if( (abs(yDif) < calibrationPercision) &&  (abs(pDif) < calibrationPercision) && (abs(rDif) < calibrationPercision) ) {
          trial--; 
-         delay(150); //if 100, it breaks, and ypr[i]-stdYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
+         delay(150); //if 100, it breaks, and ypr[i]-targetYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
 
         } else {
           Serial.println("FAILLLLl");
@@ -441,12 +433,12 @@ bool testStdYPR(float *YPR, int trials) {
   
 }
 
-void filStdYPR(float *stdYPR) {
+void filStdYPR(float *targetYPR) {
 
   //give blank slate
-  stdYPR[0]=0.0;
-  stdYPR[1]=0.0;
-  stdYPR[2]=0.0;
+  targetYPR[0]=0.0;
+  targetYPR[1]=0.0;
+  targetYPR[2]=0.0;
   
  //average of 20 values, weighted towards the newest values
  
@@ -457,15 +449,15 @@ void filStdYPR(float *stdYPR) {
     while(!getYawPitchRoll(&tempYPR[0])) {delay(3);}
     
     if(abs(tempYPR[0]) < 10000.0) { //no overflow. shouldnt be over 10,000.0
-      stdYPR[0] = (2.0*stdYPR[0]+tempYPR[0])/3.0;  
+      targetYPR[0] = (2.0*targetYPR[0]+tempYPR[0])/3.0;  
     }
     
     if(abs(tempYPR[1]) < 10000.0) { //to stop overflow - shouldnt be over 10,000.0
-      stdYPR[1] = (2.0*stdYPR[1]+tempYPR[1])/3.0;  
+      targetYPR[1] = (2.0*targetYPR[1]+tempYPR[1])/3.0;  
     } 
     
     if(abs(tempYPR[2]) < 10000.0) { //to stop overflow on the float - shouldnt be over 10,000.0
-      stdYPR[2] = (2.0*stdYPR[2]+tempYPR[2])/3.0;  
+      targetYPR[2] = (2.0*targetYPR[2]+tempYPR[2])/3.0;  
     } 
     
     i++;  
@@ -668,7 +660,7 @@ bool isMPUStable() {
        
         if( (abs(yDif)/(float)trial < 10) &&  (abs(pDif)/trial < 10) && (abs(rDif)/trial < 10) ) {
          trial--; 
-         delay(150); //if 100, it breaks, and ypr[i]-stdYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
+         delay(150); //if 100, it breaks, and ypr[i]-targetYPR[i] diverges signifigantly, then stabilizes at around //think s its because its too close to the speed of the MPU6050
 
         } else {
           Serial.print(yDif);
