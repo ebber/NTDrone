@@ -65,6 +65,8 @@ redone below, values assigned at beggining of setUp()
 */
 int mYPR[4][3];
 
+const int pastPoints=3;
+
         
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
@@ -84,17 +86,8 @@ const int maxRoll = 70; //TODO: find real Values
 
 
 //TODO1:Find true value
-const float yawPCorrectionMod = 0.0; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float yawDCorrectionMod = 0.0;  //take the derivitive of ypr, this is weighting
-
-
-const float pitchPCorrectionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float pitchDCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
-
-const float rollPCorrectionMod = 0.7; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float rollDCorrectionMod = 0.3;  //take the derivitive of ypr, this is weighting
-
-
+const float PCorrectionMod[3] = {0.0, 0.7, 0.7}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float DCorrectionMod[3] = {0.0, 0.7, 0.7};  //take the derivitive of ypr, this is weighting
 
 
 const float calibrationPercision = 0.1;  //must be positive
@@ -120,10 +113,10 @@ Data is printed as: acelX acelY acelZ giroX giroY giroZ
 // ================================================================
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
-//#define OUTPUT_YPR_DIFERENCE
+#define OUTPUT_YPR_DIFERENCE
 //#define MOTOR_SPEEDS
-#define MOTOR_SPEEDS1
-
+//#define MOTOR_SPEEDS1
+//#define DEBUG_PD
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -151,7 +144,7 @@ float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float targetYPR[3];       //base values when its flat
 
-float oldYPR[3];
+float mappedYPRerr[3][pastPoints];   //
 float adjYPRerr[3];
 
 bool newData = false;
@@ -235,11 +228,13 @@ void loop() {
     
     
     #ifdef OUTPUT_YPR_DIFERENCE
+    if(newData) {
        for(int i=0;i<3; i++) {
          Serial.print(ypr[i]-targetYPR[i]);
          Serial.print(" ");
        }   
        Serial.println();
+    }
     #endif
     
     
@@ -254,7 +249,7 @@ void loop() {
           while (Serial.available() && Serial.read()); // empty buffer again
           throttle=700;
 
-      }else if(throttle < 900 || throttle > 2000) {
+      } else if (throttle < 900 || throttle > 2000) {
         throttle=0;
       }
     }
@@ -262,8 +257,38 @@ void loop() {
     if(newData) {
       
       
+      //shift data, and map it to -33,33
+      for(int i=pastPoints;i>0;i--) {
+         for(int j=0; j<3; j++) {
+          mappedYPRerr[i][j] = mappedYPRerr[i-1][j];
+         } 
+      }
+      
+      for(int i=0; i<3; i++) {
+         mappedYPRerr[0][i] = ypr[i]-targetYPR[i];
+      }
+      mapYPR(&mappedYPRerr[0][0]);
+      /*
+      for(int i=0; i<3; i++) {
+         Serial.print(mappedYPRerr[i][0]);
+         Serial.print("\t");
+      }
+      Serial.println();
+      */
+      //put it through PD
+      float axis[pastPoints];
+      for(int i=0;i<3;i++) {
+        //fill axis with all past yaws or pitches or rolls
+        for (int j=0; j<pastPoints;j++) {
+           axis[j] = mappedYPRerr[i][j];
+        }
+
+        adjYPRerr[i]= PCorrectionMod[i]*getPComponent(mappedYPRerr[0][i]) + DCorrectionMod[i]*getDComponent(&axis[0],i,pastPoints);
+      }
+      
+      
    for (int i=0; i<4;i++) {
-      mSpeed[i]= getSpeedChangeMagnitude( mYPR[i][0]*(ypr[0]-targetYPR[0]),  mYPR[i][1]*(ypr[1]-targetYPR[1]),  mYPR[i][2]*(ypr[2]-targetYPR[2]) ); //from instantaneous
+      //mSpeed[i]= combineYPR( mYPR[i][0]*(ypr[0]-targetYPR[0]),  mYPR[i][1]*(ypr[1]-targetYPR[1]),  mYPR[i][2]*(ypr[2]-targetYPR[2],i) ); //from instantaneous
     }
     
     
@@ -301,10 +326,15 @@ void loop() {
 }
 
 
+float getPComponent(float angle) {
+  return angle;
+}
+
 //old speed is an array of speeds where [0] is most current and [numOfPoints-1] is oldest
 //predictAhead predicts how many points ahead there are
 //TODO: make it so if we have extra points in our history, get a better taylor series
-float getDComponent(float* oldValues, int numOfPoints, int motor) {
+float getDComponent(float* oldValues, int axis, int numOfPoints) {
+  /* Taylor Series slope
   float predictAhead=1.0;
 
      //get the derivatives 
@@ -320,17 +350,22 @@ float getDComponent(float* oldValues, int numOfPoints, int motor) {
       }
     }
 
-  float futurePoint = d[0][0];
-  for(int i=1; i<numOfPoints-1;i++) {
-   futurePoint = futurePoint + d[i][0] /**pow(1,i)*/ /( (float) factorial(i) ); 
+  float slope = d[1][0];
+  for(int i=2; i<numOfPoints-1 ;i++) {
+   slope = slope + d[i][0] /( (float) factorial(i) ); 
   }
-  if(motor==1) {
-    Serial.print(futurePoint);
+  */
+  float slope=oldValues[1]-oldValues[0];
+  #ifdef DEBUG_PD
+    Serial.print(axis);
     Serial.print("\t");
-  }
-  return futurePoint;
+    Serial.print(slope);
+    Serial.println("\t");
+  #endif
+  return slope;
   
 }
+
 
 int factorial(int n) {
  if(n>2) {
@@ -341,19 +376,22 @@ int factorial(int n) {
 }
 
 //take the (pitch actual - pitch desired) and the (roll actual - roll desired), return speed to change
-float getSpeedChangeMagnitude(float yaw, float pitch, float roll) {
+float combineYPR(float yaw, float pitch, float roll, int motor) {
 
-  //adjust values to -33 to 33 (so total is -99 or 99)
-   //yaw
-  yaw = mapFloat(yaw, minYaw, maxYaw, -33.0* yawCorrectionMod / 1.0, 33.0 * yawCorrectionMod / 1.0); //to account for multiplying by correction factor when retruned
-  //pitch
-  pitch = mapFloat(pitch, minPitch, maxPitch, -33.0, 33.0);
- //roll 
-  roll = mapFloat(roll, minRoll, maxRoll, -33.0, 33.0);
   
-  float cor = (yaw + pitch + roll);
+  float cor = (yaw*mYPR[motor][0] + mYPR[motor][1]*pitch + mYPR[motor][0]*roll);
   return cor;
   
+}
+
+void mapYPR(float* YPR) {
+    //adjust values to -33 to 33 (so total is -99 or 99)
+   //yaw
+  YPR[0] = mapFloat(YPR[0], minYaw, maxYaw, -33.0, 33.0); //to account for multiplying by correction factor when retruned
+  //pitch
+  YPR[1] = mapFloat(YPR[1], minPitch, maxPitch, -33.0, 33.0);
+ //roll 
+  YPR[2] = mapFloat(YPR[2], minRoll, maxRoll, -33.0, 33.0);
 }
 
 
