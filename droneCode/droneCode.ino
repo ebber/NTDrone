@@ -1,4 +1,6 @@
 #include <Servo.h>
+#include <EEPROM.h>
+
 
 // I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
 // for both classes must be in the include path of your project
@@ -63,9 +65,9 @@ const int m2YPR[] = {-1,  1, -1};
 const int m3YPR[] = { 1, -1, -1};
 redone below, values assigned at beggining of setUp()
 */
-int mYPR[4][3];
+byte mYPR[4][3];
 
-const int pastPoints=3;
+const byte pastPoints=2;
 
         
 const int armSpeed = 900;
@@ -126,6 +128,14 @@ MPU6050 mpu;
 //MPU6050 mpu(0x69); // <-- use for AD0 high
 
 
+
+// ================================================================
+// ===                        EEPROM Addresses                  ===
+// ================================================================
+const int stdYawAddr = 0;
+const int stdPitchAddr = 4;
+const int stdRolAddrl = 8;
+
 // MPU control/status vars
 bool dmpReady = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
@@ -142,10 +152,11 @@ VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measure
 VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float targetYPR[3];       //base values when its flat
+float spYPR[3];       //base values when its flat, the SP
 
 float mappedYPRerr[3][pastPoints];   //
 float adjYPRerr[3];
+
 
 bool newData = false;
 
@@ -169,7 +180,7 @@ void dmpDataReady() {
 void setup() { 
   //stupid arduino wont initialize 2D arrays
   //set motor multipliers (how a change efects motor speed). 
-  int buffer[4][3] = { { 1, -1,  1}, //1
+  byte buffer[4][3] = { { 1, -1,  1}, //1
                        {-1,  1,  1}, //1
                        {-1,  1, -1},  //-1
                        { 1, -1, -1}  };  //-1
@@ -206,7 +217,12 @@ void setup() {
    #endif
    
    //calibrate
-  calibrateYPR();
+  calibrateYPR(&spYPR[0]);
+  /*
+  EEPROM.put(stdYawAddr, spYPR[0]);
+  EEPROM.put(stdPitchAddr, spYPR[1]);
+  EEPROM.put(stdRollAddr, spYPR[2]);
+  */
   
   
     // wait for ready
@@ -217,7 +233,6 @@ void setup() {
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again  
   
-
  
 }
  
@@ -230,7 +245,7 @@ void loop() {
     #ifdef OUTPUT_YPR_DIFERENCE
     if(newData) {
        for(int i=0;i<3; i++) {
-         Serial.print(ypr[i]-targetYPR[i]);
+         Serial.print(/*ypr[i]-*/spYPR[i]);
          Serial.print(" ");
        }   
        Serial.println();
@@ -241,8 +256,7 @@ void loop() {
     if(Serial.available()){
       throttle=Serial.parseInt()*10; //GOES FROM 90 TO 200
       if(throttle<0) { //calibrate
-          Serial.println("Calibrating");
-          calibrateYPR();
+          //calibrateYPR(&spYPR[0]);
           Serial.println(F("Press any key to begin: "));
           while (Serial.available() && Serial.read()); // empty buffer
           while (!Serial.available());                 // wait for data
@@ -258,23 +272,18 @@ void loop() {
       
       
       //shift data, and map it to -33,33
-      for(int i=pastPoints;i>0;i--) {
-         for(int j=0; j<3; j++) {
+      for(int j=pastPoints; j>0; j--) {
+         for(int i=0; i<3; i++) {
           mappedYPRerr[i][j] = mappedYPRerr[i-1][j];
          } 
       }
       
       for(int i=0; i<3; i++) {
-         mappedYPRerr[0][i] = ypr[i]-targetYPR[i];
+         mappedYPRerr[i][0] = ypr[i]/*-spYPR[i]*/;
       }
       mapYPR(&mappedYPRerr[0][0]);
-      /*
-      for(int i=0; i<3; i++) {
-         Serial.print(mappedYPRerr[i][0]);
-         Serial.print("\t");
-      }
-      Serial.println();
-      */
+
+
       //put it through PD
       float axis[pastPoints];
       for(int i=0;i<3;i++) {
@@ -283,7 +292,7 @@ void loop() {
            axis[j] = mappedYPRerr[i][j];
         }
 
-        adjYPRerr[i]= PCorrectionMod[i]*getPComponent(mappedYPRerr[0][i]) + DCorrectionMod[i]*getDComponent(&axis[0],i,pastPoints);
+        adjYPRerr[i]= PCorrectionMod[i]*getPComponent(mappedYPRerr[i][0]) + DCorrectionMod[i]*getDComponent(&axis[0],i,pastPoints);
       }
       
       
@@ -318,12 +327,12 @@ void loop() {
    #ifdef MOTOR_SPEEDS
     Serial.println();
    #endif 
-    
-
-    
+ 
     interrupts();
     }
 }
+
+
 
 
 float getPComponent(float angle) {
@@ -410,16 +419,17 @@ int spinRotor(Servo motor, float speedChange) {
 }
 
 
-void calibrateYPR() {
+void calibrateYPR(float* stdYPR) {
+  Serial.println("Calibrating");
   bool calibrated=false;
   int trials;
   do{
       trials=16;
      do {
-       filStdYPR(&targetYPR[0]);
+       filStdYPR(&stdYPR[0]);
        delay(100);
        trials=trials/2;
-     } while( testStdYPR(&targetYPR[0],trials) && trials > 4 );
+     } while( testStdYPR(&stdYPR[0],trials) && trials > 4 );
    calibrated = trials <= 4;
    }while(!calibrated);
    
