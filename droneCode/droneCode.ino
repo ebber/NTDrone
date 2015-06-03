@@ -24,8 +24,8 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-//#define MOTOR_SPEEDS
-#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
+#define MOTOR_SPEEDS
+//#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 
 
@@ -103,8 +103,8 @@ const int maxRoll = 70; //TODO: find real Values
 
 
 //TODO1:Find true value
-const float PCorrectionMod[3] = {0.0, 0.7, 0.9}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float DCorrectionMod[3] = {0.0, 0.5, 0.7};  //take the derivitive of ypr, this is weighting
+const float PCorrectionMod[3] = {0.0, 0.8, 0.8}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float DCorrectionMod[3] = {0.0, 0.6, 0.6};  //take the derivitive of ypr, this is weighting
 
 
 const float calibrationPercision = 0.1;  //must be positive
@@ -182,12 +182,12 @@ void dmpDataReady() {
 
 
 void setup() { 
-  //stupid arduino wont initialize 2D arrays
+  //stupid arduino won't initialize 2D arrays
   //set motor multipliers (how a change efects motor speed). 
-  int buffer[4][3] = { { 1, -1,  1}, //1
-                       {-1,  1,  1}, //1
-                       {-1,  1, -1},  //-1
-                       { 1, -1, -1}  };  //-1
+  int buffer[4][3] = { { 1, -1,  1}, 
+                       {-1,  1,  1},
+                       {-1,  1, -1},  
+                       { 1, -1, -1}  }; 
            
            //fill array
     for (int x=0; x<4; x++){
@@ -302,13 +302,7 @@ void loop() {
 
       mapYPR(&adjYPRerr[0]);
 
-      /*
-      for(int i=0;i<3; i++) {
-         Serial.print(adjYPRerr[i]);
-         Serial.print("\t");
-       } 
-       Serial.print("\n");
-       */
+
       
    for (int k=0; k<4;k++) {
       mSpeed[k] = combineYPR(adjYPRerr[0],  adjYPRerr[1], adjYPRerr[2],k); //from instantaneous
@@ -324,26 +318,26 @@ void loop() {
     
     #ifdef MOTOR_SPEEDS1
     
-       for(int i=2;i<3; i++) {
+       for(int i=1;i<2; i++) {
          Serial.print((int) mSpeed[i]);
          Serial.print("\t");
        }  
        
-       for(int i=1;i<2; i++) {
+       for(int i=2;i<3; i++) {
          Serial.print(ypr[i]-spYPR[i]);
          Serial.print("\t");
        }  
         
        
-      Serial.println();
+      Serial.print("\n");
     #endif
    
    #ifdef MOTOR_SPEEDS
-    Serial.println();
+    Serial.print("\n");
    #endif 
 
    #ifdef DEBUG_PD
-    Serial.println();
+    Serial.print("\n");
    #endif 
  
     interrupts();
