@@ -24,11 +24,7 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-<<<<<<< HEAD
-//#define MOTOR_SPEEDS
-=======
 #define MOTOR_SPEEDS
->>>>>>> origin/master
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 
@@ -114,9 +110,9 @@ const float DCorrectionMod[3] = {0.0, 0.6, 0.6};  //take the derivitive of ypr, 
 const float calibrationPercision = 0.1;  //must be positive
 
 /*
-Your offsets:	-4592	-537	700	-1214	-18	0
--4550	-523	753	-1269	-23	-2
--4548	-526	751	-1267	-22	-2
+Your offsets:  -4592 -537  700 -1214 -18 0
+-4550 -523  753 -1269 -23 -2
+-4548 -526  751 -1267 -22 -2
 
 
 
