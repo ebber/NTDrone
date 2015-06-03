@@ -24,7 +24,11 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
+<<<<<<< HEAD
 //#define MOTOR_SPEEDS
+=======
+#define MOTOR_SPEEDS
+>>>>>>> origin/master
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 
