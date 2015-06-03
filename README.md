@@ -18,6 +18,18 @@ A5 	MPU SCA
 
 
 
+Using:
+Motors/ESC: BEC ESC 10A
+input voltage: {6, 7.5, 9, 12 (short periods of time)}
+
+low signal: 900 uS
+High signal: 2000uS
+
+Arming sequence:
+unneeded 
+
+/*
+Previous
 Motors/ESC: HobbyKing RedBrick ESC 10A
 input voltage: {6, 7.5, 9, 12 (short periods of time)}
 
@@ -29,3 +41,4 @@ Arming sequence:
 delay(500);
 2000uS
 //armed
+*/
