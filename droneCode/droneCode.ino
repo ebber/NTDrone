@@ -24,9 +24,10 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-//#define MOTOR_SPEEDS
+#define MOTOR_SPEEDS
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
+//#define CALIBRATE
 
 
 // ================================================================
@@ -84,7 +85,8 @@ int mYPR[4][3];
 const byte pastPoints = 6;
 //theres an array thats float d[pastPoints][pastPoints]; grows by the square
 
-        
+const int maxSerialInputLength=15;  //not enforced in code, will silently overflow TODO: fix
+
 const int armSpeed = 900;
 const int hoverSpeed = 1200; //random untested value - should be where drone hovers
 const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
@@ -103,8 +105,8 @@ const int maxRoll = 70; //TODO: find real Values
 
 
 //TODO1:Find true value
-const float PCorrectionMod[3] = {0.0, 0.8, 0.8}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float DCorrectionMod[3] = {0.0, 0.6, 0.6};  //take the derivitive of ypr, this is weighting
+const float PCorrectionMod[3] = {0.4, 1.1, 1.1}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float DCorrectionMod[3] = {0.2, 0.7, 0.7};  //take the derivitive of ypr, this is weighting
 
 
 const float calibrationPercision = 0.1;  //must be positive
@@ -138,7 +140,7 @@ MPU6050 mpu;
 // ================================================================
 const int stdYawAddr = 0;
 const int stdPitchAddr = 4;
-const int stdRolAddrl = 8;
+const int stdRollAddr = 8;
 
 // MPU control/status vars
 bool dmpReady = false;  // set true if DMP init was successful
@@ -164,8 +166,10 @@ float adjYPRerr[3];
 
 bool newData = false;
 
+String serialData;
+bool newSerialData=false;
 
-int throttle=700; //goes from 0 to 100
+int throttle=700; //goes from 900 to 2000
 
 
 Servo motor[4];
@@ -198,6 +202,7 @@ void setup() {
         
         
   //actualy setup()
+  serialData.reserve(maxSerialInputLength);
   
   setUpMPU();
   
@@ -219,15 +224,20 @@ void setup() {
    #ifdef VERBOSE_SERIAL
       Serial.println(F("Calibrating yaw pitch roll"));
    #endif
-   
+   #ifdef CALIBRATE
    //calibrate
   calibrateYPR(&spYPR[0]);
-  /*
-  EEPROM.put(stdYawAddr, spYPR[0]);
-  EEPROM.put(stdPitchAddr, spYPR[1]);
-  EEPROM.put(stdRollAddr, spYPR[2]);
-  */
+  #else
+ 
+        EEPROM.get(stdYawAddr, spYPR[0]);
+        EEPROM.get(stdPitchAddr, spYPR[1]);
+        EEPROM.get(stdRollAddr, spYPR[2]);
+        Serial.print(F("Getting old target"));
+  #endif
   
+    for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(armSpeed); //low throtle
+   } 
   
     // wait for ready
     Serial.println(millis()/1000.);
@@ -257,18 +267,32 @@ void loop() {
     #endif
     
     
-    if(Serial.available()){
-      throttle=Serial.parseInt()*10; //GOES FROM 90 TO 200
-      if(throttle<0) { //calibrate
+    if(newSerialData){
+      String input=getSerialData(); //GOES FROM 90 TO 200
+      throttle= input.toInt();
+      if(0 == throttle) { //its not an int
+        
+      }
+       if(throttle<0) { //calibrate
           calibrateYPR(&spYPR[0]);
           Serial.println(F("Press any key to begin: "));
           while (Serial.available() && Serial.read()); // empty buffer
           while (!Serial.available());                 // wait for data
           while (Serial.available() && Serial.read()); // empty buffer again
-          throttle=700;
+          throttle=minThorttle;
+            
+          EEPROM.put(stdYawAddr, spYPR[0]);
+          EEPROM.put(stdPitchAddr, spYPR[1]);
+          EEPROM.put(stdRollAddr, spYPR[2]);
 
+      } else if(throttle==0) {
+        EEPROM.get(stdYawAddr, spYPR[0]);
+        EEPROM.get(stdPitchAddr, spYPR[1]);
+        EEPROM.get(stdRollAddr, spYPR[2]);
+        Serial.print(F("Getting old target"));
       } else if (throttle < 900 || throttle > 2000) {
-        throttle=0;
+        Serial.println(throttle/10);
+        throttle=700;
       }
     }
 
@@ -333,7 +357,7 @@ void loop() {
     #endif
    
    #ifdef MOTOR_SPEEDS
-    Serial.print("\n");
+    Serial.println();
    #endif 
 
    #ifdef DEBUG_PD
@@ -342,6 +366,32 @@ void loop() {
  
     interrupts();
     }
+}
+
+
+//Run after loop()
+void serialEvent() {
+  while (Serial.available() ) {
+    // get the new byte:
+    char inChar = (char) Serial.read(); 
+
+    if(';'== inChar) {
+      newSerialData = true;
+      break;
+    } else {
+      // add it to the inputString:
+      serialData += inChar;
+    }
+  }
+}
+
+//takes up to 15 chars
+String getSerialData() {
+  String data = serialData;
+  serialData="";
+  newSerialData=false;
+  return data;
+  
 }
 
 
@@ -437,6 +487,14 @@ int spinRotor(Servo motor, float speedChange) {
 
 
 void calibrateYPR(float* stdYPR) {
+  if(throttle>900) {
+    Serial.println(F("Cannot calibrate midflight"));
+    return; 
+  }
+   //kill the motors
+   for(int i=0; i<4;i++) {
+      motor[i].writeMicroseconds(armSpeed); //low throtle
+   } 
   Serial.println("Calibrating");
   bool calibrated=false;
   int trials;
