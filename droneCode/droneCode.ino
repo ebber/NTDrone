@@ -23,8 +23,8 @@
 // ================================================================
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
-//#define OUTPUT_YPR_DIFERENCE
-#define MOTOR_SPEEDS
+#define OUTPUT_YPR_DIFERENCE
+//#define MOTOR_SPEEDS
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 //#define CALIBRATE
@@ -105,9 +105,12 @@ const int maxRoll = 70; //TODO: find real Values
 
 
 //TODO1:Find true value
-const float PCorrectionMod[3] = {0.4, 1.1, 1.1}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float DCorrectionMod[3] = {0.2, 0.7, 0.7};  //take the derivitive of ypr, this is weighting
+const float PCorrectionMod[3] = {0.4, 1.0, 1.0}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float DCorrectionMod[3] = {0.1, 0.5, 0.5};  //take the derivitive of ypr, this is weighting
 
+//for test
+float pCorrectionModMultiplier=0;
+float dCorrectionModMultiplier=0;
 
 const float calibrationPercision = 0.1;  //must be positive
 
@@ -203,7 +206,7 @@ void setup() {
         
   //actualy setup()
   serialData.reserve(maxSerialInputLength);
-  
+  Serial.begin(9600);
   setUpMPU();
   
   motor[0].attach(motor0Pin);    // attached to pin 
@@ -216,7 +219,7 @@ void setup() {
   
 
   //9600 is magical. Havent tested to see if any other baud rate are not magical
-  Serial.begin(9600);
+  
      for(int i=0; i<4;i++) {
       motor[i].writeMicroseconds(armSpeed); //low throtle
    } 
@@ -246,6 +249,7 @@ void setup() {
     while (Serial.available() && Serial.read()); // empty buffer
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again  
+    Serial.println(F("Begginiing"));
   
  
 }
@@ -258,7 +262,9 @@ void loop() {
     
     #ifdef OUTPUT_YPR_DIFERENCE
     if(newData) {
-       for(int i=0;i<3; i++) {
+        Serial.print(throttle);
+        Serial.print("\t");
+       for(int i=1;i<3; i++) {
          Serial.print(ypr[i]-spYPR[i]);
          Serial.print(" ");
        }   
@@ -269,30 +275,54 @@ void loop() {
     
     if(newSerialData){
       String input=getSerialData(); //GOES FROM 90 TO 200
-      throttle= input.toInt();
-      if(0 == throttle) { //its not an int
+      
+      if(input[0] == 'p') { //its not an int
         
-      }
-       if(throttle<0) { //calibrate
+        pCorrectionModMultiplier=( (float) ( ( (String) input[1]).toInt() ) ) /2.0;
+        Serial.println(pCorrectionModMultiplier);
+        
+      } else if(input[0] == 'd') { //its not an int
+        
+        dCorrectionModMultiplier=( (float) ( ( (String) input[1]).toInt() ) ) /2.0;
+        Serial.println(dCorrectionModMultiplier);
+        
+      } else if(input[0] == 'o') { //its not an int
+        
+        EEPROM.get(stdYawAddr, spYPR[0]);
+        EEPROM.get(stdPitchAddr, spYPR[1]);
+        EEPROM.get(stdRollAddr, spYPR[2]);
+        Serial.print(F("Getting old target"));
+        
+      } else if(input[0] == 'c') { //its not an int
+        
+        //calibrate
+      
           calibrateYPR(&spYPR[0]);
           Serial.println(F("Press any key to begin: "));
           while (Serial.available() && Serial.read()); // empty buffer
           while (!Serial.available());                 // wait for data
           while (Serial.available() && Serial.read()); // empty buffer again
           throttle=minThorttle;
-            
+          /*  
           EEPROM.put(stdYawAddr, spYPR[0]);
           EEPROM.put(stdPitchAddr, spYPR[1]);
           EEPROM.put(stdRollAddr, spYPR[2]);
-
-      } else if(throttle==0) {
-        EEPROM.get(stdYawAddr, spYPR[0]);
-        EEPROM.get(stdPitchAddr, spYPR[1]);
-        EEPROM.get(stdRollAddr, spYPR[2]);
-        Serial.print(F("Getting old target"));
-      } else if (throttle < 900 || throttle > 2000) {
-        Serial.println(throttle/10);
-        throttle=700;
+          */
+      } else if('k' == input[0]) {
+        
+        
+      } else if (0 != input.toInt() ) {
+        throttle= input.toInt()*10;
+        Serial.println(throttle);
+        
+        if (throttle <= 400) {
+          //do nothing, probably a mistaye
+        } else if (throttle > 2000) {
+          //shit no man
+          throttle=700;
+        }
+      } else {
+        Serial.println(input);
       }
     }
 
@@ -320,7 +350,7 @@ void loop() {
            axis[j] = YPRerr[i][j];
         }
 
-        adjYPRerr[i]= getPComponent(YPRerr[i][0], PCorrectionMod[i]) + getDComponent(&axis[0],i,pastPoints,  DCorrectionMod[i]);
+        adjYPRerr[i]= getPComponent(YPRerr[i][0], PCorrectionMod[i] * pCorrectionModMultiplier) + getDComponent(&axis[0],i,pastPoints,  DCorrectionMod[i]*dCorrectionModMultiplier);
       }
 
 
@@ -378,6 +408,8 @@ void serialEvent() {
     if(';'== inChar) {
       newSerialData = true;
       break;
+    } else if ('`' == inChar) {
+        serialData="";
     } else {
       // add it to the inputString:
       serialData += inChar;
