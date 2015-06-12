@@ -23,8 +23,8 @@
 // ================================================================
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
-#define OUTPUT_YPR_DIFERENCE
-//#define MOTOR_SPEEDS
+//#define OUTPUT_YPR_DIFERENCE
+#define MOTOR_SPEEDS
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 //#define CALIBRATE
@@ -73,13 +73,7 @@ bool blinkState = false;
 // ================================================================
 const int minThorttle = 900; //min throttle
 const int maxThorttle = 2000; //max throttle
-/*
-const int m0YPR[] = { 1, -1,  1};
-const int m1YPR[] = {-1,  1,  1};
-const int m2YPR[] = {-1,  1, -1};
-const int m3YPR[] = { 1, -1, -1};
-redone below, values assigned at beggining of setUp()
-*/
+
 int mYPR[4][3];
 
 const byte pastPoints = 6;
@@ -87,15 +81,15 @@ const byte pastPoints = 6;
 
 const int maxSerialInputLength=15;  //not enforced in code, will silently overflow TODO: fix
 
-const int armSpeed = 900;
-const int hoverSpeed = 1200; //random untested value - should be where drone hovers
+const int armSpeed = 700;
+const int hoverSpeed = 1400; //random untested value - should be where drone hovers
 const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
 
 const int minAcclValue = 0;  //experimentally detirmined
 const int maxAcclValue = 100; //experimentally detirmened
 
-const int minYaw = -180;  //TODO: Find real values
-const int maxYaw = 180;  //TODO: Find real Values
+const int maxYaw = 180;  
+const int minYaw = -180;  
 
 const int minPitch = -60; //TODO: find real Values
 const int maxPitch = 60; //TODO: find real Values
@@ -105,12 +99,12 @@ const int maxRoll = 70; //TODO: find real Values
 
 
 //TODO1:Find true value
-const float PCorrectionMod[3] = {0.4, 1.0, 1.0}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float DCorrectionMod[3] = {0.1, 0.5, 0.5};  //take the derivitive of ypr, this is weighting
+const float PCorrectionMod[3] = {0.1, 1.0, 1.0}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
+const float DCorrectionMod[3] = {0.25, 1.0, 1.0};  //take the derivitive of ypr, this is weighting
 
 //for test
-float pCorrectionModMultiplier=0;
-float dCorrectionModMultiplier=0;
+float pCorrectionModMultiplier=1.5;
+float dCorrectionModMultiplier=0.5;
 
 const float calibrationPercision = 0.1;  //must be positive
 
@@ -162,6 +156,7 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float spYPR[3];       //base values when its flat, the SP
+float flatYPR[3] = {-100.97,  0.20,  -0.18}; //put in EEPROM
 
 float YPRerr[3][pastPoints];   //
 float adjYPRerr[3];
@@ -209,6 +204,7 @@ void setup() {
   Serial.begin(9600);
   setUpMPU();
   
+  
   motor[0].attach(motor0Pin);    // attached to pin 
   motor[1].attach(motor1Pin);    // attached to pin 
   motor[2].attach(motor2Pin);    // attached to pin 
@@ -229,14 +225,23 @@ void setup() {
    #endif
    #ifdef CALIBRATE
    //calibrate
-  calibrateYPR(&spYPR[0]);
+  calibrateYPR(&flatYPR[0]);
   #else
  
-        EEPROM.get(stdYawAddr, spYPR[0]);
-        EEPROM.get(stdPitchAddr, spYPR[1]);
-        EEPROM.get(stdRollAddr, spYPR[2]);
+        //EEPROM.get(stdYawAddr, flatYPR[0]);
+        EEPROM.get(stdPitchAddr, flatYPR[1]);
+        EEPROM.get(stdRollAddr, flatYPR[2]);
+        getYawPitchRoll(&ypr[0]);
+        flatYPR[0]=ypr[0]; //have updataed orientation
         Serial.print(F("Getting old target"));
+ 
   #endif
+
+  //our target is flat
+  for(int i=0; i<3;i++) {
+    spYPR[i]=flatYPR[i];
+  }
+
   
     for(int i=0; i<4;i++) {
       motor[i].writeMicroseconds(armSpeed); //low throtle
@@ -250,8 +255,26 @@ void setup() {
     while (!Serial.available());                 // wait for data
     while (Serial.available() && Serial.read()); // empty buffer again  
     Serial.println(F("Begginiing"));
-  
- 
+    spYPR[0]=ypr[0];
+  //fill history
+  for(int p=0;p<=pastPoints+3;) {
+    
+    newData = getYawPitchRoll(&ypr[0]);
+    if(newData) {
+    //shift data, and map it to -33,33
+        for(int j=pastPoints-1; j>0; j--) {
+           for(int i=0; i<3; i++) {
+            YPRerr[i][j] = YPRerr[i][j-1];
+           } 
+        }
+        
+        for(int i=0; i<3; i++) {
+           YPRerr[i][0] = ypr[i]-spYPR[i];
+        }
+      p++;
+      spYPR[0]=ypr[0];
+    }
+  }    
 }
  
  
@@ -260,70 +283,11 @@ void loop() {
     newData=getYawPitchRoll(&ypr[0]); //fill acceleration array, and return if we got new data
     
     
-    #ifdef OUTPUT_YPR_DIFERENCE
-    if(newData) {
-        Serial.print(throttle);
-        Serial.print("\t");
-       for(int i=1;i<3; i++) {
-         Serial.print(ypr[i]-spYPR[i]);
-         Serial.print(" ");
-       }   
-       Serial.println();
-    }
-    #endif
+   
     
     
     if(newSerialData){
-      String input=getSerialData(); //GOES FROM 90 TO 200
-      
-      if(input[0] == 'p') { //its not an int
-        
-        pCorrectionModMultiplier=( (float) ( ( (String) input[1]).toInt() ) ) /2.0;
-        Serial.println(pCorrectionModMultiplier);
-        
-      } else if(input[0] == 'd') { //its not an int
-        
-        dCorrectionModMultiplier=( (float) ( ( (String) input[1]).toInt() ) ) /2.0;
-        Serial.println(dCorrectionModMultiplier);
-        
-      } else if(input[0] == 'o') { //its not an int
-        
-        EEPROM.get(stdYawAddr, spYPR[0]);
-        EEPROM.get(stdPitchAddr, spYPR[1]);
-        EEPROM.get(stdRollAddr, spYPR[2]);
-        Serial.print(F("Getting old target"));
-        
-      } else if(input[0] == 'c') { //its not an int
-        
-        //calibrate
-      
-          calibrateYPR(&spYPR[0]);
-          Serial.println(F("Press any key to begin: "));
-          while (Serial.available() && Serial.read()); // empty buffer
-          while (!Serial.available());                 // wait for data
-          while (Serial.available() && Serial.read()); // empty buffer again
-          throttle=minThorttle;
-          /*  
-          EEPROM.put(stdYawAddr, spYPR[0]);
-          EEPROM.put(stdPitchAddr, spYPR[1]);
-          EEPROM.put(stdRollAddr, spYPR[2]);
-          */
-      } else if('k' == input[0]) {
-        
-        
-      } else if (0 != input.toInt() ) {
-        throttle= input.toInt()*10;
-        Serial.println(throttle);
-        
-        if (throttle <= 400) {
-          //do nothing, probably a mistaye
-        } else if (throttle > 2000) {
-          //shit no man
-          throttle=700;
-        }
-      } else {
-        Serial.println(input);
-      }
+      inputHandler();
     }
 
     if(newData) {
@@ -342,9 +306,19 @@ void loop() {
       
 
 
-      //put it through PD
+      //put yaw through PD
       float axis[pastPoints];
-      for(int i=0;i<3;i++) {
+      //no need to mess with yaw constants
+      for(int i=0;i<1;i++) {
+        //fill axis with all past yaws or pitches or rolls
+        for (int j=0; j<pastPoints;j++) {
+           axis[j] = YPRerr[i][j];
+        }
+
+        adjYPRerr[i]= getPComponent(YPRerr[i][0], PCorrectionMod[i] ) + getDComponent(&axis[0],i,pastPoints,  DCorrectionMod[i]);
+      }
+      //deal with pitch and roll
+      for(int i=1;i<3;i++) {
         //fill axis with all past yaws or pitches or rolls
         for (int j=0; j<pastPoints;j++) {
            axis[j] = YPRerr[i][j];
@@ -369,6 +343,13 @@ void loop() {
     spinRotor(motor[2], mSpeed[2]); //spin rotor C
     spinRotor(motor[3], mSpeed[3]);  //spin rotor D
     
+     #ifdef OUTPUT_YPR_DIFERENCE
+       for(int i=0;i<3; i++) {
+         Serial.print(ypr[i]-spYPR[i]);
+         Serial.print("\t");
+       }   
+       
+    #endif
     
     #ifdef MOTOR_SPEEDS1
     
@@ -387,6 +368,9 @@ void loop() {
     #endif
    
    #ifdef MOTOR_SPEEDS
+    Serial.println();
+   #endif 
+     #ifdef OUTPUT_YPR_DIFERENCE
     Serial.println();
    #endif 
 
@@ -415,6 +399,68 @@ void serialEvent() {
       serialData += inChar;
     }
   }
+}
+
+void inputHandler() {
+  String input=getSerialData(); //GOES FROM 90 TO 200
+      
+      if(input[0] == 'p') { //its not an int
+        
+        pCorrectionModMultiplier = ( (String) input[1]).toFloat();
+        Serial.println(pCorrectionModMultiplier);
+        
+      } else if(input[0] == 'd') { //its not an int
+        
+        dCorrectionModMultiplier = ( (String) input[1]).toFloat();
+        Serial.println(dCorrectionModMultiplier);
+        
+      } else if(input[0] == 'o') { //its not an int
+        
+        EEPROM.get(stdYawAddr, spYPR[0]);
+        EEPROM.get(stdPitchAddr, spYPR[1]);
+        EEPROM.get(stdRollAddr, spYPR[2]);
+        Serial.print(F("Getting old target"));
+        for(int i=0; i<3;i++) {
+            Serial.print(spYPR[i]);
+            Serial.print("\t");
+          }
+        
+      } else if(input[0] == 'c') { //its not an int
+        
+        //calibrate
+      
+          calibrateYPR(&spYPR[0]);
+          Serial.println(F("Press any key to begin: "));
+          while (Serial.available() && Serial.read()); // empty buffer
+          while (!Serial.available());                 // wait for data
+          while (Serial.available() && Serial.read()); // empty buffer again
+          throttle=minThorttle;
+          /*  
+          EEPROM.put(stdYawAddr, spYPR[0]);
+          EEPROM.put(stdPitchAddr, spYPR[1]);
+          EEPROM.put(stdRollAddr, spYPR[2]);
+          */
+          for(int i=0; i<3;i++) {
+            Serial.print(spYPR[i]);
+            Serial.print("\t");
+          }
+          Serial.println();
+      } else if('k' == input[0]) {
+        
+        
+      } else if (0 != input.toInt() ) {
+        throttle= input.toInt()*10;
+        Serial.println(throttle);
+        
+        if (throttle <= 400) {
+          //do nothing, probably a mistaye
+        } else if (throttle > 2000) {
+          //shit no man
+          throttle=700;
+        }
+      } else {
+        Serial.println(input);
+      }
 }
 
 //takes up to 15 chars
@@ -525,7 +571,7 @@ void calibrateYPR(float* stdYPR) {
   }
    //kill the motors
    for(int i=0; i<4;i++) {
-      motor[i].writeMicroseconds(armSpeed); //low throtle
+      motor[i].writeMicroseconds(minThorttle); //low throtle
    } 
   Serial.println("Calibrating");
   bool calibrated=false;
