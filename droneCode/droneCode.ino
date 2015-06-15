@@ -24,7 +24,7 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-#define MOTOR_SPEEDS
+//#define MOTOR_SPEEDS
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 //#define CALIBRATE
