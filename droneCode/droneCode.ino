@@ -82,13 +82,9 @@ const byte pastPoints = 6;
 const int maxSerialInputLength=15;  //not enforced in code, will silently overflow TODO: fix
 
 const int armSpeed = 700;
-<<<<<<< HEAD
+
 const int hoverSpeed = 1450; //random untested value - should be where drone hovers
 const int launchSpeed = 1550; //iffy tested exact testing needed -experimentally detirmed to be around here
-=======
-const int hoverSpeed = 1400; //random untested value - should be where drone hovers
-const int launchSpeed = 1400; //iffy tested exact testing needed -experimentally detirmed to be around here
->>>>>>> origin/master
 
 const int minAcclValue = 0;  //experimentally detirmined
 const int maxAcclValue = 100; //experimentally detirmened
