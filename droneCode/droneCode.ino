@@ -24,7 +24,7 @@
 //#define OUTPUT_READABLE_YAWPITCHROLL
 //#define VERBOSE_SERIAL
 //#define OUTPUT_YPR_DIFERENCE
-//#define MOTOR_SPEEDS
+#define MOTOR_SPEEDS
 //#define MOTOR_SPEEDS1  //mSpeed \t ypr-targetYPR
 //#define DEBUG_PD
 //#define CALIBRATE
@@ -101,10 +101,10 @@ const int maxRoll = 70; //TODO: find real Values
 
 //TODO1:Find true value
 const float PCorrectionMod[3] = {0.1, 1.0, 1.0}; //stabilization modifier (ie correction factor multiplied by this value), based on instantaenous ypr
-const float DCorrectionMod[3] = {0.25, 1.0, 1.0};  //take the derivitive of ypr, this is weighting
+const float DCorrectionMod[3] = {0.0, 1.0, 1.0};  //take the derivitive of ypr, this is weighting
 
 //for test
-float pCorrectionModMultiplier=1.5;
+float pCorrectionModMultiplier=1.2;
 float dCorrectionModMultiplier=0.5;
 
 const float calibrationPercision = 0.1;  //must be positive
@@ -369,6 +369,8 @@ void loop() {
     #endif
    
    #ifdef MOTOR_SPEEDS
+    Serial.print(serialData);
+    Serial.print("\t");
     Serial.println();
    #endif 
      #ifdef OUTPUT_YPR_DIFERENCE
